@@ -1,9 +1,11 @@
 import os
 import sys
-import SimpleITK as sitk
+from re import compile
+import concurrent.futures
+
 import matplotlib.pyplot as plt
 import pandas as pd
-from re import compile
+import SimpleITK as sitk
 
 
 class DataAnalyzer(object):
@@ -11,42 +13,46 @@ class DataAnalyzer(object):
     def __init__(self, data_root):
         """
         Initializes the DataAnalyzer with a root directory for data.
-        
+
         Parameters:
         -----------
         data_root : str
             The root directory where the data is stored.
         """
         self.data_root = data_root
-        self.regex : str = None
         if not os.path.exists(data_root):
             print(f"Data root {data_root} does not exist.")
             sys.exit(1)
 
+        self.regex: str = None
+        self.cpus = os.cpu_count()
+
     def abspath(self, path):
         return os.path.join(self.data_root, path)
 
-    # get a list with all dirs on a given path
     def get_dirs(self, path):
+        """Generator that yields directory names in the specified path.
+        """
         if not os.path.exists(path):
             print(f"Path {path} does not exist.")
             sys.exit(1)
-        return [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
+        for d in os.listdir(path):
+            if os.path.isdir(os.path.join(path, d)):
+                yield d
 
-    
     def get_files(self, path, regex=None):
         """
-        Returns a list of files in the specified directory that match the given regex pattern.
+        Generator that yields files in the specified directory that match the given regex pattern.
         Parameters:
         -----------
         path : str
             The directory path to search for files.
         regex : str, optional
-            A regex pattern to filter the files. If None, all files are returned.
-        Returns:
-        --------
-        list
-            A list of filenames that match the regex pattern in the specified directory.
+            A regex pattern to filter the files. If None, all files are yielded.
+        Yields:
+        -------
+        str
+            Filename that matches the regex pattern in the specified directory.
         """
 
         if not os.path.exists(path):
@@ -54,18 +60,22 @@ class DataAnalyzer(object):
             sys.exit(1)
 
         if regex:
-            regex = compile(regex) 
+            regex = compile(regex)
 
-        return [f for f in os.listdir(path) if 
-                (os.path.isfile(os.path.join(path, f))
-                and
-                regex.match(f) if regex else True)
-                ]
+        for f in os.listdir(path):
+            if os.path.isfile(os.path.join(path, f)):
+                if regex:
+                    if regex.match(f):
+                        yield f
+                else:
+                    yield f
 
-    def show_mha_image(self, image_path, save=False):
+    def show_image(self, image_path, save=False):
         """
-        Opens and displays an image in .mha format.
-        
+        Opens and displays an image.
+        Only images supported by SimpleITK.ReadImage are supported.
+        By default, 3D images show the middle slice.
+
         Parameters:
         -----------
         image_path : str
@@ -74,7 +84,7 @@ class DataAnalyzer(object):
         try:
             # Load the image using SimpleITK
             image = sitk.ReadImage(image_path)
-            
+
             # Convert the image to a numpy array for visualization
             image_array = sitk.GetArrayViewFromImage(image)
 
@@ -83,19 +93,29 @@ class DataAnalyzer(object):
                 image_array = image_array[image_array.shape[0] // 2, :, :]
             elif image_array.ndim == 2:
                 image_array = image_array[:, :]
-            
+
             # Display the image using matplotlib
-            plt.imshow(image_array, cmap='gray')
+            plt.imshow(image_array, cmap="gray")
             plt.title(".mha Image")
-            plt.axis('off')
+            plt.axis("off")
             if save:
-                name = os.path.splitext(os.path.basename(image_path))[0] + '.png'
-                plt.savefig(name, bbox_inches='tight', pad_inches=0.1)
+                name = os.path.splitext(os.path.basename(image_path))[0] + ".png"
+                plt.savefig(name, bbox_inches="tight", pad_inches=0.1)
             plt.show()
         except Exception as e:
             print(f"Error opening the image: {e}")
 
     def count_and_find_non_empty_masks(self, folder):
+        """Uses SimpleITK to count non-empty masks in a folder.
+        Assumes the files inside the dir are actually masks.
+
+        Returns:
+        --------
+        tuple: (non_empty_count, total_count, non_empty_list)
+        - non_empty_count: Number of non-empty mask files.
+        - total_count: Total number of mask files.
+        - non_empty_list: List of non-empty mask filenames.
+        """
         mask_files = self.get_files(folder)
         non_empty_count = 0
         non_empty_list = []
@@ -103,6 +123,7 @@ class DataAnalyzer(object):
             path = os.path.join(folder, f)
             try:
                 mask = sitk.ReadImage(path)
+                # transform it into an array and check if it has any non-zero values
                 arr = sitk.GetArrayViewFromImage(mask)
                 if arr.max() > 0:
                     non_empty_count += 1
@@ -115,8 +136,11 @@ class DataAnalyzer(object):
         """
         Reads the header of a .mha file and returns the value for the given key.
         Used as a fallback if the metadata is not available trough SimpleITK.
+
+        Implemented to read only the header, the class will break out of the line-reading
+        loop when it encounters a line that cannot be decoded as UTF-8.
         """
-        
+
         with open(filepath, "rb") as f:
             for line in f:
                 try:
@@ -127,7 +151,7 @@ class DataAnalyzer(object):
                         return line.split("=", 1)[-1].strip()
                 except Exception:
                     print(f"Error decoding line in {filepath}: {line}")
-                    break # we break when the data is not utf-8 encoded (hex or binary stuff in mri imaging)
+                    break  # we break when the data is not utf-8 encoded (hex or binary stuff in mri imaging)
         return None
 
     def parse_metadata_file(self, filepath):
@@ -142,7 +166,7 @@ class DataAnalyzer(object):
             "prostate_volume": None,
             "vendor": None,
             "mri_name": None,
-            "psa_report": None
+            "psa_report": None,
         }
         try:
             image = sitk.ReadImage(abspath)
@@ -153,7 +177,9 @@ class DataAnalyzer(object):
 
             if "PROSTATE_VOLUME_REPORT" in keys:
                 value = image.GetMetaData("PROSTATE_VOLUME_REPORT")
-                info["prostate_volume"] = float(value) if value.lower() != "nan" else None
+                info["prostate_volume"] = (
+                    float(value) if value.lower() != "nan" else None
+                )
             if "0008|0070" in keys:
                 info["vendor"] = image.GetMetaData("0008|0070")
             if "0008|1090" in keys:
@@ -184,58 +210,47 @@ class DataAnalyzer(object):
         records = []
 
         # loop over the files in the dir, construct path and get their metadata
-        for f in meta_files: 
+        for f in meta_files:
             path = os.path.join(folder, f)
             record = self.parse_metadata_file(path)
             records.append(record)
         df = pd.DataFrame(records)
         return df
 
-    '''def iter_metadata_records_subdirs(self, parent_dir):
-        """
-        Generator that yields metadata records for each file in all subdirectories.
-        """
-        parent_dir = self.abspath(parent_dir)
+    def _file_paths_gen(self, parent_dir):
+        """Generator that yields file paths of all files in subdirectories"""
         for subdir in self.get_dirs(parent_dir):
             subdir_path = os.path.join(parent_dir, subdir)
             meta_files = self.get_files(subdir_path, self.regex)
             for f in meta_files:
-                file_path = os.path.join(subdir_path, f)
-                record = self.parse_metadata_file(file_path)
-                #record["subdir"] = subdir
-                yield record
+                yield os.path.join(subdir_path, f)
 
-    def collect_metadata_from_subdirs(self, parent_dir):
+    def collect_metadata_from_subdirs(self, parent_dir, max_workers=None):
         """
-        Collects metadata from all files in all subdirectories into a pandas DataFrame.
+        Collects metadata from all files in all subdirectories into a
+        pandas DataFrame using parallel processing. Uses the maximu
+        number of CPUs available or a specified number of workers unless specified otherwise.
         """
-        return pd.DataFrame(self.iter_metadata_records_subdirs(parent_dir))'''
-
-    
-
-    def collect_metadata_from_subdirs(self, parent_dir, max_workers=8):
-        """
-        Parallel version: Collects metadata from all files in all subdirectories into a pandas DataFrame.
-        """
-        import concurrent.futures
         parent_dir = self.abspath(parent_dir)
-        tasks = []
-        for subdir in self.get_dirs(parent_dir):
-            subdir_path = os.path.join(parent_dir, subdir)
-            meta_files = self.get_files(subdir_path, self.regex)
-            for f in meta_files:
-                file_path = os.path.join(subdir_path, f)
-                tasks.append(file_path)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            records = list(executor.map(self.parse_metadata_file, tasks))
+        self.cpus if max_workers is None else max_workers
+
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=max_workers
+        ) as executor:
+            records = list(
+                executor.map(self.parse_metadata_file, 
+                self._file_paths_gen(parent_dir))
+            )
         return pd.DataFrame(records)
+
 
 if __name__ == "__main__":
     from time import perf_counter
 
+    # create an analyzer object with the root path to the dataset and
     analyzer = DataAnalyzer("/home/guest/work/Datasets")
-    path = "picai_folds/picai_images_fold0/10189/10189_1000192_adc.mha"
 
+    # use this regex to filter the files
     analyzer.regex = "(.*_t2w.mha$)|(.*_sag.mha$)|(.*_cor.mha$)"
     res = analyzer.collect_metadata_to_dataframe("picai_folds/picai_images_fold0/10189")
     print(res)
@@ -244,16 +259,4 @@ if __name__ == "__main__":
     df = analyzer.collect_metadata_from_subdirs("picai_folds/picai_images_fold0")
     print(df.shape)
     print(df)
-    print(perf_counter()-start, "seconds")
-
-
-
-
-
-
-
-
-
-
-
-
+    print(perf_counter() - start, "seconds")
