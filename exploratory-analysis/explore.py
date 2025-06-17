@@ -9,6 +9,12 @@ import SimpleITK as sitk
 
 
 class DataAnalyzer(object):
+    """A class for analyzing medical imaging data.
+    This class provides methods to read and analyze image files, extract metadata,
+    and visualize images. It is designed to work with directories containing medical
+    imaging data, such as MRI scans, and can handle both 2D and 3D images.
+    """
+
 
     def __init__(self, data_root):
         """
@@ -79,7 +85,7 @@ class DataAnalyzer(object):
         Parameters:
         -----------
         image_path : str
-            Path to the .mha image file.
+            Path to the image file.
         """
         try:
             # Load the image using SimpleITK
@@ -96,7 +102,7 @@ class DataAnalyzer(object):
 
             # Display the image using matplotlib
             plt.imshow(image_array, cmap="gray")
-            plt.title(".mha Image")
+            plt.title("Image")
             plt.axis("off")
             if save:
                 name = os.path.splitext(os.path.basename(image_path))[0] + ".png"
@@ -134,7 +140,7 @@ class DataAnalyzer(object):
 
     def _get_header_value(self, filepath, key):
         """
-        Reads the header of a .mha file and returns the value for the given key.
+        Reads the header of an image file and returns the value for the given key.
         Used as a fallback if the metadata is not available trough SimpleITK.
 
         Implemented to read only the header, the class will break out of the line-reading
@@ -156,7 +162,7 @@ class DataAnalyzer(object):
 
     def parse_metadata_file(self, filepath):
         """
-        Parses a .mha file and extracts required fields using SimpleITK.
+        Parses an image file and extracts required fields using SimpleITK.
         """
         abspath = self.abspath(filepath)
         info = {
@@ -257,6 +263,5 @@ if __name__ == "__main__":
 
     start = perf_counter()
     df = analyzer.collect_metadata_from_subdirs("picai_folds/picai_images_fold0")
-    print(df.shape)
     print(df)
     print(perf_counter() - start, "seconds")
