@@ -39,6 +39,7 @@ class DataAnalyzer(object):
     def get_dirs(self, path):
         """Generator that yields directory names in the specified path.
         """
+        path = self.abspath(path)
         if not os.path.exists(path):
             print(f"Path {path} does not exist.")
             sys.exit(1)
@@ -60,7 +61,7 @@ class DataAnalyzer(object):
         str
             Filename that matches the regex pattern in the specified directory.
         """
-
+        path = self.abspath(path)
         if not os.path.exists(path):
             print(f"Path {path} does not exist.")
             sys.exit(1)
@@ -87,6 +88,7 @@ class DataAnalyzer(object):
         image_path : str
             Path to the image file.
         """
+        image_path = self.abspath(image_path)
         try:
             # Load the image using SimpleITK
             image = sitk.ReadImage(image_path)
@@ -102,7 +104,7 @@ class DataAnalyzer(object):
 
             # Display the image using matplotlib
             plt.imshow(image_array, cmap="gray")
-            plt.title("Image")
+            plt.title(os.path.basename(image_path))
             plt.axis("off")
             if save:
                 name = os.path.splitext(os.path.basename(image_path))[0] + ".png"
@@ -122,9 +124,10 @@ class DataAnalyzer(object):
         - total_count: Total number of mask files.
         - non_empty_list: List of non-empty mask filenames.
         """
+        folder = self.abspath(folder)
         mask_files = self.get_files(folder)
         non_empty_count = 0
-        non_empty_list = []
+        empty_list = []
         for f in mask_files:
             path = os.path.join(folder, f)
             try:
@@ -133,10 +136,11 @@ class DataAnalyzer(object):
                 arr = sitk.GetArrayViewFromImage(mask)
                 if arr.max() > 0:
                     non_empty_count += 1
-                    non_empty_list.append(f)
+                else:
+                    empty_list.append(f)
             except Exception as e:
                 print(f"Error reading {f}: {e}")
-        return non_empty_count, len(mask_files), non_empty_list
+        return non_empty_count, empty_list
 
     def _get_header_value(self, filepath, key):
         """
