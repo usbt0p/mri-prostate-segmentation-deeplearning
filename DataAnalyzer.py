@@ -3,7 +3,10 @@ import sys
 from re import compile
 import concurrent.futures
 
+#import matplotlib
+#matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
+
 import pandas as pd
 import SimpleITK as sitk
 
@@ -79,7 +82,7 @@ class DataAnalyzer(object):
                 else:
                     yield f
 
-    def show_image(self, image_path, save=False):
+    def show_image(self, *image_paths, save=None):
         """
         Opens and displays an image.
         Only images supported by SimpleITK.ReadImage are supported.
@@ -90,30 +93,46 @@ class DataAnalyzer(object):
         image_path : str
             Path to the image file.
         """
-        image_path = self.abspath(image_path)
         try:
-            # Load the image using SimpleITK
-            image = sitk.ReadImage(image_path)
-
-            # Convert the image to a numpy array for visualization
-            image_array = sitk.GetArrayViewFromImage(image)
-
-            # Take a slice of the image (e.g., the middle slice)
-            if image_array.ndim == 3:
-                image_array = image_array[image_array.shape[0] // 2, :, :]
-            elif image_array.ndim == 2:
-                image_array = image_array[:, :]
-
-            # Display the image using matplotlib
-            plt.imshow(image_array, cmap="gray")
-            plt.title(os.path.basename(image_path))
-            plt.axis("off")
-            if save:
-                name = os.path.splitext(os.path.basename(image_path))[0] + ".png"
-                plt.savefig(name, bbox_inches="tight", pad_inches=0.1)
+            # Create a figure with subplots for each image
+            num_images = len(image_paths)
+            fig, axes = plt.subplots(1, num_images, figsize=(5 * num_images, 5))
+            
+            # Ensure axes is iterable even for a single image
+            if num_images == 1:
+                axes = [axes]
+            
+            for ax, image_path in zip(axes, image_paths):
+                image_path = self.abspath(image_path)
+                
+                # Load the image using SimpleITK
+                image = sitk.ReadImage(image_path)
+                
+                # Convert the image to a numpy array for visualization
+                image_array = sitk.GetArrayViewFromImage(image)
+                
+                # Take a slice of the image (e.g., the middle slice)
+                if image_array.ndim == 3:
+                    image_array = image_array[image_array.shape[0] // 2, :, :]
+                elif image_array.ndim == 2:
+                    image_array = image_array[:, :]
+                
+                # Display the image on the corresponding axis
+                ax.imshow(image_array, cmap="gray")
+                ax.set_title(os.path.basename(image_path))
+                ax.axis("off")
+            
+            # Save the figure if requested
+            if save is not None:
+                if not save.endswith(".png"):
+                    save += ".png"
+                plt.savefig(save, bbox_inches="tight", pad_inches=0.1)
+            
             plt.show()
         except Exception as e:
-            print(f"Error opening the image: {e}")
+            print(f"Error opening the images: {e}")
+
+        
 
     def count_and_find_non_empty_masks(self, folder):
         """Uses SimpleITK to count non-empty masks in a folder.
@@ -258,9 +277,16 @@ class DataAnalyzer(object):
 
 if __name__ == "__main__":
     from time import perf_counter
+    from os.path import join
 
     # create an analyzer object with the root path to the dataset and
     analyzer = DataAnalyzer("/home/guest/work/Datasets")
+
+    paths = {
+        "picai_labels_wg" : "picai_labels_all/picai_labels-main/anatomical_delineations/whole_gland/AI/Guerbet23",
+        "picai_labels_zonal" : "picai_labels_all/picai_labels-main/anatomical_delineations/zonal_pz_tz/AI/Yuan23",
+        "picai_folds" : "picai_folds/"
+    }
 
     # use this regex to filter the files
     analyzer.regex = "(.*_t2w.mha$)|(.*_sag.mha$)|(.*_cor.mha$)"
@@ -271,3 +297,20 @@ if __name__ == "__main__":
     df = analyzer.collect_metadata_from_subdirs("picai_folds/picai_images_fold0")
     print(df)
     print(perf_counter() - start, "seconds")
+
+    import random
+
+    # pick a random folder and set the name of a file inside as the prefix
+    d = "picai_folds/picai_images_fold0"
+    dirs = list(analyzer.get_dirs(d))
+    random_dir = random.choice(dirs)
+    files_in_dir = analyzer.get_files(join(d, random_dir), ".*_t2w.mha$")
+
+    # we have to do this because get files is a generator
+    name = list(files_in_dir)[0] 
+    i1 = join(d, random_dir, name)
+    # get the corresponding nii.gz file that masks the image
+    nii = name.split("_t2w")[0] + ".nii.gz"
+    i2 = join(paths['picai_labels_zonal'], nii)
+
+    analyzer.show_image(i1, i2, save="./test.png")
