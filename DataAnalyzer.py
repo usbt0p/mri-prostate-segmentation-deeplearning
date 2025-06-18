@@ -6,6 +6,7 @@ import concurrent.futures
 #import matplotlib
 #matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
+import numpy as np
 
 import pandas as pd
 import SimpleITK as sitk
@@ -292,7 +293,40 @@ class DataAnalyzer(object):
                 self._file_paths_gen(parent_dir))
             )
         return pd.DataFrame(records)
+    
+    def image_intensity_histogram(self, image_path, bins=128, plot=False):
+        """
+        Computes the histogram of pixel intensities for a given image.
+        
+        Parameters:
+        -----------
+        image_path : str
+            Path to the image file.
+        bins : int, optional
+            Number of bins for the histogram. Default is 256.
+        
+        Returns:
+        --------
+        tuple: (histogram, bin_edges)
+            histogram: The computed histogram of pixel intensities.
+            bin_edges: The edges of the bins used in the histogram.
+        """
+        image_path = self.abspath(image_path)
+        image = sitk.ReadImage(self.abspath(image_path))
+        array = sitk.GetArrayFromImage(image).flatten()
+        hist, bin_edges = np.histogram(array, bins=bins, range=(array.min(), array.max()))
+        
+        if plot:
+            plt.figure(figsize=(6,4))
+            plt.bar(bin_edges[:-1], hist, width=np.diff(bin_edges), align='edge')
+            plt.xlabel('Pixel Intensity')
+            plt.ylabel('Frequency')
+            plt.title('Histogram of Pixel Intensities')
+            plt.grid()
+            plt.show()
 
+        return hist, bin_edges
+    
 
 if __name__ == "__main__":
     from time import perf_counter
@@ -309,8 +343,10 @@ if __name__ == "__main__":
 
     # use this regex to filter the files
     analyzer.regex = "t2.nii.gz" #(.*_t2w.mha$)|(.*_sag.mha$)|(.*_cor.mha$)"
-    res = analyzer.collect_metadata_to_dataframe("prostate158/prostate158_train/train/110") #"picai_folds/picai_images_fold0/10189")
-    print(res)
+    # res = analyzer.collect_metadata_to_dataframe("prostate158/prostate158_train/train/110") #"picai_folds/picai_images_fold0/10189")
+    # print(res)
+
+    analyzer.image_intensity_histogram("prostate158/prostate158_train/train/111/t2.nii.gz", plot=True)
 
     # start = perf_counter()
     # df = analyzer.collect_metadata_from_subdirs("picai_folds/picai_images_fold0")
