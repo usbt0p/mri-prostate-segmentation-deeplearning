@@ -134,33 +134,49 @@ class DataAnalyzer(object):
 
         
 
+    def is_empty_mask(self, path):
+        """Checks if a mask file is empty (contains only zero values).
+    
+        Parameters:
+        -----------
+        path : str
+            Path to the mask file.
+    
+        Returns:
+        --------
+        bool
+            True if the mask is empty, False otherwise.
+        """
+        path = self.abspath(path)
+        try:
+            mask = sitk.ReadImage(path)
+            arr = sitk.GetArrayViewFromImage(mask)
+            return arr.max() == 0
+        except Exception as e:
+            print(f"Error reading {path}: {e}")
+            return True  # Treat as empty if there's an error
+    
+    
     def count_and_find_non_empty_masks(self, folder):
         """Uses SimpleITK to count non-empty masks in a folder.
         Assumes the files inside the dir are actually masks.
-
+    
         Returns:
         --------
-        tuple: (non_empty_count, total_count, non_empty_list)
+        tuple: (non_empty_count, empty_list)
         - non_empty_count: Number of non-empty mask files.
-        - total_count: Total number of mask files.
-        - non_empty_list: List of non-empty mask filenames.
+        - empty_list: List of empty mask filenames.
         """
         folder = self.abspath(folder)
-        mask_files = self.get_files(folder)
+        mask_files = self.get_files(folder, regex=self.regex)
         non_empty_count = 0
         empty_list = []
         for f in mask_files:
             path = os.path.join(folder, f)
-            try:
-                mask = sitk.ReadImage(path)
-                # transform it into an array and check if it has any non-zero values
-                arr = sitk.GetArrayViewFromImage(mask)
-                if arr.max() > 0:
-                    non_empty_count += 1
-                else:
-                    empty_list.append(f)
-            except Exception as e:
-                print(f"Error reading {f}: {e}")
+            if self.is_empty_mask(path):
+                empty_list.append(f)
+            else:
+                non_empty_count += 1
         return non_empty_count, empty_list
 
     def _get_header_value(self, filepath, key):
@@ -205,6 +221,9 @@ class DataAnalyzer(object):
             info["dim_size"] = image.GetSize()
             # Try to get metadata fields if present
             keys = image.GetMetaDataKeys()
+            
+            # for key in keys:
+            #     print(image.GetMetaData(key))
 
             if "PROSTATE_VOLUME_REPORT" in keys:
                 value = image.GetMetaData("PROSTATE_VOLUME_REPORT")
@@ -289,28 +308,28 @@ if __name__ == "__main__":
     }
 
     # use this regex to filter the files
-    analyzer.regex = "(.*_t2w.mha$)|(.*_sag.mha$)|(.*_cor.mha$)"
-    res = analyzer.collect_metadata_to_dataframe("picai_folds/picai_images_fold0/10189")
+    analyzer.regex = "t2.nii.gz" #(.*_t2w.mha$)|(.*_sag.mha$)|(.*_cor.mha$)"
+    res = analyzer.collect_metadata_to_dataframe("prostate158/prostate158_train/train/110") #"picai_folds/picai_images_fold0/10189")
     print(res)
 
-    start = perf_counter()
-    df = analyzer.collect_metadata_from_subdirs("picai_folds/picai_images_fold0")
-    print(df)
-    print(perf_counter() - start, "seconds")
+    # start = perf_counter()
+    # df = analyzer.collect_metadata_from_subdirs("picai_folds/picai_images_fold0")
+    # print(df)
+    # print(perf_counter() - start, "seconds")
 
-    import random
+    # import random
 
-    # pick a random folder and set the name of a file inside as the prefix
-    d = "picai_folds/picai_images_fold0"
-    dirs = list(analyzer.get_dirs(d))
-    random_dir = random.choice(dirs)
-    files_in_dir = analyzer.get_files(join(d, random_dir), ".*_t2w.mha$")
+    # # pick a random folder and set the name of a file inside as the prefix
+    # d = "picai_folds/picai_images_fold0"
+    # dirs = list(analyzer.get_dirs(d))
+    # random_dir = random.choice(dirs)
+    # files_in_dir = analyzer.get_files(join(d, random_dir), ".*_t2w.mha$")
 
-    # we have to do this because get files is a generator
-    name = list(files_in_dir)[0] 
-    i1 = join(d, random_dir, name)
-    # get the corresponding nii.gz file that masks the image
-    nii = name.split("_t2w")[0] + ".nii.gz"
-    i2 = join(paths['picai_labels_zonal'], nii)
+    # # we have to do this because get files is a generator
+    # name = list(files_in_dir)[0] 
+    # i1 = join(d, random_dir, name)
+    # # get the corresponding nii.gz file that masks the image
+    # nii = name.split("_t2w")[0] + ".nii.gz"
+    # i2 = join(paths['picai_labels_zonal'], nii)
 
-    analyzer.show_image(i1, i2, save="./test.png")
+    # analyzer.show_image(i1, i2, save="./test.png")
