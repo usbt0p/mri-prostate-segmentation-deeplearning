@@ -13,8 +13,10 @@ class DataAnalyzer(object):
     This class provides methods to read and analyze image files, extract metadata,
     and visualize images. It is designed to work with directories containing medical
     imaging data, such as MRI scans, and can handle both 2D and 3D images.
-    """
 
+    Beware this heavily relies on setting absolte paths in each function to work properly.
+    Every function except inner helpers (_functio_name) expects a path relative to the data root directory.
+    """
 
     def __init__(self, data_root):
         """
