@@ -83,7 +83,7 @@ class DataAnalyzer(object):
                 else:
                     yield f
 
-    def show_image(self, *image_paths, save=None):
+    def show_image(self, *image_paths, save : str =None):
         """
         Opens and displays an image.
         Only images supported by SimpleITK.ReadImage are supported.
@@ -294,7 +294,7 @@ class DataAnalyzer(object):
             )
         return pd.DataFrame(records)
     
-    def image_intensity_histogram(self, image_path, bins=128, plot=False):
+    def image_intensity_histogram(self, image_path, bins=128, plot=False, save=None):
         """
         Computes the histogram of pixel intensities for a given image.
         
@@ -323,6 +323,10 @@ class DataAnalyzer(object):
             plt.ylabel('Frequency')
             plt.title('Histogram of Pixel Intensities')
             plt.grid()
+            if save is not None:
+                if not save.endswith(".png"):
+                    save += ".png"
+                plt.savefig(save, bbox_inches="tight", pad_inches=0.1)
             plt.show()
 
         return hist, bin_edges
