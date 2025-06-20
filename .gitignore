@@ -2,6 +2,7 @@
 ## specifics
 *.png
 *.nii.gz
+imgs/*
 
 ## Default stuff
 # Byte-compiled / optimized / DLL files
