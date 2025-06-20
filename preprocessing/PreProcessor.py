@@ -155,10 +155,70 @@ def ensure_3d(image: sitk.Image) -> sitk.Image:
     else:
         raise ValueError(f"Unsupported image dimension: {dim}")
 
+def load_image(image_path: str) -> sitk.Image:
+    """
+    Reads a 3D image from a file path and does appropriate processing.
 
-def get_region_of_interest():
-    # TODO select a region centered on the whole prostate gland, slightly bigger than it
-    ...
+    Parameters:
+        image_path (str): Path to the image file.
+
+    Returns:
+        sitk.Image: The read 3D image.
+    """
+    image = sitk.ReadImage(image_path)
+    return ensure_3d(image)
+
+
+def get_region_of_interest(image: sitk.Image, mask: sitk.Image, margin: int = 30) -> sitk.Image:
+    """
+    Extract a region of interest (ROI) centered on the nonzero region of the mask,
+    expanded by a given margin.
+
+    Parameters:
+        image (sitk.Image): Input image.
+        mask (sitk.Image): Binary mask of the region (e.g., prostate).
+        margin (int): Number of voxels to expand the bounding box in each direction.
+
+    Returns:
+        sitk.Image: Cropped ROI image.
+    """
+    # Convert mask to numpy array and find nonzero coordinates
+    mask_array = sitk.GetArrayFromImage(mask)
+    coords = np.argwhere(mask_array > 0)
+    min_coords = coords.min(axis=0)
+    max_coords = coords.max(axis=0)
+
+    # Compute center of the mask in array coordinates (z, y, x)
+    center = ((min_coords + max_coords) / 2).astype(int)
+
+    # Compute the maximum extent (span) in any direction
+    extent = (max_coords - min_coords).max()
+    # Add margin to the extent
+    box_size = extent + 2 * margin
+
+    # Ensure box_size is odd for symmetry (optional)
+    if box_size % 2 == 0:
+        box_size += 1
+
+    # Compute start and end indices for each axis
+    half_size = box_size // 2
+    shape = np.array(mask_array.shape)
+    min_box = center - half_size
+    max_box = center + half_size
+
+    # Clip to image bounds
+    min_box = np.maximum(min_box, 0)
+    max_box = np.minimum(max_box, shape - 1)
+
+    # Recompute size in case box was clipped
+    size = max_box - min_box + 1
+
+    # SimpleITK uses z, y, x order for size and index
+    start = [int(x) for x in min_box[::-1]]
+    size = [int(s) for s in size[::-1]]
+
+    roi = sitk.RegionOfInterest(image, size=size, index=start)
+    return roi
 
 
 def resample_image():
@@ -173,6 +233,35 @@ def register_images():
 
 # Example usage
 if __name__ == "__main__":
+
+    # TODO see if the method of clipping to bounds with some margin is good
+    # 
+    # TODO figuer out if different prepsocessing steps are order - invariant,
+    # or if they should be applied in a specific order.
+    #
+    # for example, if we apply n4 bias field correction, should we apply it before or after
+    # extracting the region of interest? after = less information to do the correction, but
+    # faster, before = more information, but slower.
+    # should alignignement / registration be done before or after the region of interest extraction?
+
+    # TODO how to check proper functioning of the methods? analyze the intensity distribution?
+
+    # TODO for n4 and normalize, some images might need background masking, but it
+    # seems top work like shit. any fixes?
+
+    # TODO determine the upscaling / downscaling process: 
+    # order matters here, when to do it? 
+
+    # TODO REMEMBER YOU CHANGED THE GET_FILE GENERATOR TO RETURN ABS PATHS!! MIGH INTRODUCE
+    # SOME HEAVY REGRESSIONS!!!
+
+    # TODO other stuff:
+    # 1. download the remaining datasets (script)
+    # 2. make some analysis of them
+    # 3. make a pipeline system / figure out if there is one that exists and lets you 
+    # use custom functions
+
+    import os
     from DataAnalyzer import DataAnalyzer
 
     # we will pick several random images, apply preprocessing and save them in the ./imgs dir,
@@ -181,52 +270,95 @@ if __name__ == "__main__":
     data_analyzer = DataAnalyzer("/home/guest/work/Datasets")
     data_analyzer.regex = ".*_t2w.mha"
 
-    # use custom funtion to pick random directories
-    rfolders = data_analyzer.pick_random(
-        "picai_folds/picai_images_fold0/", 3, type="dir"
-    )
+    paths = {
+        "picai_labels_wg" : "picai_labels_all/picai_labels-main/anatomical_delineations/whole_gland/AI/Guerbet23",
+        "picai_labels_zonal" : "picai_labels_all/picai_labels-main/anatomical_delineations/zonal_pz_tz/AI/Yuan23",
+        "picai_folds" : "picai_folds/"
+    }
 
-    for i, folder in enumerate(rfolders, start=1):
-
-        img_path = data_analyzer.pick_random(
-            folder, 1, type="file")[0]  # unpack because it returns a list
-        print(f"Processing image: {img_path}")
-
-        img = sitk.ReadImage(img_path)
-        img = ensure_3d(img)
-        img_array = sitk.GetArrayFromImage(img)
-
-        # Apply N4 correction
-        img_out, log_bias = n4_bias_field_correction(img)
-
-        # Example usage of norm:
-        # img_out = normalize_image(img, method='minmax')
-
-        # example usage of n4_correction:
-        img_out, log_bias = n4_bias_field_correction(img)
-
-        # example usage of automatic mask:
-        # img_out = create_automatic_mask(img)
-
-        # TODO this method seems to return garbage, review. Check in the papers if they use it
-        # TODO: check if the method is necessary, test n4 without
-        # if it is, incorporate into n4, if not remove it
-        # then test n4, and then move on to registration, roi and resampling.
-        # study whether to interpolate contours of the masks?
-
-        # Save the processed images
-        output_path = f"./imgs/processed_image_{i}.nii.gz"
-        sitk.WriteImage(img_out, output_path)
-        logb_path = f"./imgs/log_bias_{i}.nii.gz"
-        sitk.WriteImage(log_bias, logb_path)
-
-        da = DataAnalyzer(".")
-        da.show_image(img_path, logb_path, output_path, save=f"./imgs/test_{i}.png")
-
-        # histograms help understand how the processing affects intensity distribution
-        da.image_intensity_histogram(
-            img_path, plot=True, save=f"./imgs/histogram_original_{i}.png"
+    def roi_test():
+        # use custom funtion to pick random directories
+        rfolders = data_analyzer.pick_random(
+            "picai_folds/picai_images_fold0/", 3, type="dir"
         )
-        da.image_intensity_histogram(
-            output_path, plot=True, save=f"./imgs/histogram_processed_{i}.png"
+
+        for i, folder in enumerate(rfolders, start=1):
+
+            img_path = data_analyzer.pick_random(
+                folder, 1, type="file")[0]
+            print(f"Processing image: {img_path}")
+
+            #"_".join(os.path.basename(img_path).split("_")[0:1])
+            file_id = os.path.basename(img_path)[0:13] 
+                        
+            mask_path = list(data_analyzer.get_files(
+                paths["picai_labels_wg"], 
+                regex=file_id
+            ))[0]
+            print(f"Using mask: {mask_path}")
+
+            img = load_image(img_path)
+            mask = load_image(mask_path)
+            
+            roi = get_region_of_interest(img, mask)
+            output_path = f"./imgs/roi_image_{i}.nii.gz"
+            sitk.WriteImage(roi, output_path)
+
+            da = DataAnalyzer(".")
+            da.show_image(
+                img_path, mask_path, output_path, save=f"./imgs/roi_test_{i}.png"
+            )        
+    
+    roi_test()
+            
+    def n4_test():
+        
+        # use custom funtion to pick random directories
+        rfolders = data_analyzer.pick_random(
+            "picai_folds/picai_images_fold0/", 3, type="dir"
         )
+
+        for i, folder in enumerate(rfolders, start=1):
+
+            img_path = data_analyzer.pick_random(
+                folder, 1, type="file")[0]  # unpack because it returns a list
+            print(f"Processing image: {img_path}")
+
+            img = sitk.ReadImage(img_path)
+            img = ensure_3d(img)
+            img_array = sitk.GetArrayFromImage(img)
+
+            # Apply N4 correction
+            img_out, log_bias = n4_bias_field_correction(img)
+
+            # Example usage of norm:
+            # img_out = normalize_image(img, method='minmax')
+
+            # example usage of n4_correction:
+            img_out, log_bias = n4_bias_field_correction(img)
+
+            # example usage of automatic mask:
+            # img_out = create_automatic_mask(img)
+
+            # TODO this method seems to return garbage, review. Check in the papers if they use it
+            # TODO: check if the method is necessary, test n4 without
+            # if it is, incorporate into n4, if not remove it
+            # then test n4, and then move on to registration, roi and resampling.
+            # study whether to interpolate contours of the masks?
+
+            # Save the processed images
+            output_path = f"./imgs/processed_image_{i}.nii.gz"
+            sitk.WriteImage(img_out, output_path)
+            logb_path = f"./imgs/log_bias_{i}.nii.gz"
+            sitk.WriteImage(log_bias, logb_path)
+
+            da = DataAnalyzer(".")
+            da.show_image(img_path, logb_path, output_path, save=f"./imgs/test_{i}.png")
+
+            # histograms help understand how the processing affects intensity distribution
+            da.image_intensity_histogram(
+                img_path, plot=True, save=f"./imgs/histogram_original_{i}.png"
+            )
+            da.image_intensity_histogram(
+                output_path, plot=True, save=f"./imgs/histogram_processed_{i}.png"
+            )
