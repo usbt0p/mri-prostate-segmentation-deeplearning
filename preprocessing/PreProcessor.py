@@ -1,7 +1,8 @@
 import numpy as np
 import SimpleITK as sitk
 
-def normalize_image(image: sitk.Image, method: str = 'zscore') -> sitk.Image:
+
+def normalize_image(image: sitk.Image, method: str = "zscore") -> sitk.Image:
     """
     Normalize a SimpleITK image using Z-score or Min-Max normalization.
 
@@ -14,12 +15,12 @@ def normalize_image(image: sitk.Image, method: str = 'zscore') -> sitk.Image:
     """
     array = sitk.GetArrayFromImage(image)  # shape: [slices, height, width]
     non_zero = array[array > 0]  # Avoid background
-    
-    if method == 'zscore':
+
+    if method == "zscore":
         mean = non_zero.mean()
         std = non_zero.std()
         norm_array = (array - mean) / std
-    elif method == 'minmax':
+    elif method == "minmax":
         min_val = non_zero.min()
         max_val = non_zero.max()
         norm_array = (array - min_val) / (max_val - min_val)
@@ -33,187 +34,199 @@ def normalize_image(image: sitk.Image, method: str = 'zscore') -> sitk.Image:
 
     return norm_image
 
-def create_automatic_mask(image, threshold_method='otsu'):
+
+def create_automatic_mask(
+    image: sitk.Image, threshold_method: str = "otsu"
+) -> sitk.Image:
     """
-    Crea una máscara automática para la imagen.
+    Create an automatic mask for the image.
+
+    Note that this function may return bad results for images that do not
+    present a clear distinction between foreground and background, like some
+    of the t2w axial images in the PICAI dataset.
     """
-    if threshold_method == 'otsu':
-        # Usar umbralización Otsu
+    if threshold_method == "otsu":
+        # Use Otsu thresholding
         otsu_filter = sitk.OtsuThresholdImageFilter()
         otsu_filter.SetInsideValue(0)
         otsu_filter.SetOutsideValue(1)
         mask = otsu_filter.Execute(image)
     else:
-        # Usar umbralización por percentil
+        # Use percentile thresholding
         image_array = sitk.GetArrayFromImage(image)
         threshold = np.percentile(image_array[image_array > 0], 10)
-        mask = sitk.BinaryThreshold(image, lowerThreshold=threshold, 
-                                  upperThreshold=image_array.max(),
-                                  insideValue=1, outsideValue=0)
-    
-    # Operaciones morfológicas para limpiar la máscara
+        mask = sitk.BinaryThreshold(
+            image,
+            lowerThreshold=threshold,
+            upperThreshold=image_array.max(),
+            insideValue=1,
+            outsideValue=0,
+        )
+
+    # Morphological operations to clean the mask
     mask = sitk.BinaryMorphologicalClosing(mask, [3, 3, 3])
     mask = sitk.BinaryFillhole(mask)
-    
+
     return sitk.Cast(mask, sitk.sitkUInt8)
 
-def n4_correction(image : sitk.Image, 
-                  mask_path=None, # TODO pasar una máscara de ROI
-                  shrink_factor=4, 
-                  convergence_tolerance=0.001,
-                  max_iterations=[50, 50, 50, 50]):        
-
-    
-    # Aplicar corrección de campo de sesgo N4ITK
-    
-    # TODO ver si puede pasarle una máscara de ROI de la glándula principal
-    # Cargar o crear máscara
-    # if mask_path:
-    #     try:
-    #         mask = sitk.ReadImage(mask_path, sitk.sitkUInt8)
-    #         print("Máscara personalizada cargada")
-    #     except Exception as e:
-    #         print(f"Error al cargar máscara: {e}. Creando máscara automática...")
-    #         mask = _create_automatic_mask(image)
-    # else:
-    #     mask = _create_automatic_mask(image)
-    
-    image = sitk.Cast(image, sitk.sitkFloat32)
-
-    # Configurar filtro N4ITK
-    corrector = sitk.N4BiasFieldCorrectionImageFilter()
-    corrector.SetMaximumNumberOfIterations(max_iterations)
-    #corrector.SetConvergenceThreshold(convergence_tolerance)
-    
-    # Aplicar corrección con factor de reducción para acelerar procesamiento
-    if shrink_factor > 1:
-        # Reducir imagen y máscara
-        shrinker = sitk.ShrinkImageFilter()
-        shrinker.SetShrinkFactors([shrink_factor] * image.GetDimension())
-        
-        shrunk_image = shrinker.Execute(image)
-        #shrunk_mask = shrinker.Execute(mask)
-        
-        # Aplicar N4 en imagen reducida
-        log_bias_field = corrector.Execute(shrunk_image)#, shrunk_mask)
-        
-        # Expandir campo de sesgo a tamaño original
-        #expander = sitk.BSplineTransformInitializerImageFilter()
-        log_bias_field = sitk.Resample(log_bias_field, image, 
-                                        sitk.Transform(), 
-                                        sitk.sitkLinear, 
-                                        0.0, 
-                                        log_bias_field.GetPixelID())
-    else:
-        # Aplicar N4 directamente
-        log_bias_field = corrector.Execute(image)#, mask)
-    
-    # Aplicar corrección
-    bias_field = sitk.Exp(log_bias_field)
-    corrected_image = image / bias_field
-    print("Corrección N4ITK completada")
-    
-    return corrected_image
-
-import SimpleITK as sitk
 
 def n4_bias_field_correction(
     image: sitk.Image,
     shrink_factor: int = 4,
     num_iterations: int = 50,
-    num_fitting_levels: int = 4
+    num_fitting_levels: int = 4,
 ) -> sitk.Image:
     """
-    Aplica corrección N4 del campo de sesgo a toda la imagen sin usar máscara.
+    Applies N4 bias field correction to the whole image without using a mask.
 
-    Parámetros:
-        image: imagen de entrada (Float32 o Float64).
-        shrink_factor: factor para reducir resolución (por defecto 4).
-        num_iterations: iteraciones por nivel de ajuste.
-        num_fitting_levels: niveles en la jerarquía multi‐escala.
+    Parameters:
+        image: input image (Float32 or Float64).
+        shrink_factor: factor to reduce resolution (default 4).
+        num_iterations: iterations per fitting level.
+        num_fitting_levels: levels in the multi-scale hierarchy.
 
-    Retorna:
-        Imagen con corrección del bias field aplicada.
+    Returns:
+        Image with bias field correction applied.
     """
-    # Asegurar tipo float
+    # Ensure float type
     image = sitk.Cast(image, sitk.sitkFloat32)
 
-    # Crear máscara si no se suministra
-    #if mask is not None:
-        # TODO see if this is necessary
-        #mask = sitk.OtsuThreshold(image, 0, 1, 200)
-        
-    # Reducir resolución para acelerar cálculo
+    # Create mask if not supplied
+    # if mask is not None:
+    # TODO see if this is necessary
+    # mask = create_automatic_mask(image, threshold_method='otsu')
+
+    # Reduce resolution to speed up computation
     if shrink_factor > 1:
         small = sitk.Shrink(image, [shrink_factor] * image.GetDimension())
     else:
         small = image
 
-    # Configurar filtro N4
+    # Configure N4 filter
     corrector = sitk.N4BiasFieldCorrectionImageFilter()
     corrector.SetMaximumNumberOfIterations([num_iterations] * num_fitting_levels)
 
-    # Ejecutar corrección sin máscara: se usa toda la imagen
+    # Run correction without mask: use the whole image
     corrected_small = corrector.Execute(small)
 
-    # Reconstruir campo de sesgo logaritmico en resolución original
+    # Reconstruct logarithmic bias field at original resolution
     log_bias = corrector.GetLogBiasFieldAsImage(image)
 
-    # Aplicar corrección completa
+    # Apply full correction
     corrected = image / sitk.Exp(log_bias)
 
-    # Copiar información de espacialidad
+    # Copy spatial information
     corrected.CopyInformation(image)
 
     return corrected, log_bias
 
 
-# Ejemplo de uso
+def ensure_3d(image: sitk.Image) -> sitk.Image:
+    """
+    Ensures the image is 3D. If it is 4D with a single volume in the fourth dimension, extracts it.
+    If it has more than one volume, raises an error.
+    This is necessary since SimpleITK likes to pull weird shenanigans with 4D images upon
+    loading, even if they are actually 3D.
+
+    Parameters:
+        image (sitk.Image): Input image (3D or 4D).
+
+    Returns:
+        sitk.Image: 3D image.
+    """
+    dim = image.GetDimension()
+
+    if dim == 3:
+        return image
+
+    elif dim == 4:
+        size = list(image.GetSize())
+        if size[3] != 1:
+            raise ValueError(
+                f"The image has {size[3]} volumes in the 4th dimension. Expected only one."
+            )
+
+        # Extract the 3D volume (index 0 in the 4th dimension)
+        extract_size = size[:3] + [0]  # remove the 4th dimension
+        extract_index = [0, 0, 0, 0]
+        extracted = sitk.Extract(image, size=extract_size, index=extract_index)
+        return extracted
+
+    else:
+        raise ValueError(f"Unsupported image dimension: {dim}")
+
+
+def get_region_of_interest():
+    # TODO select a region centered on the whole prostate gland, slightly bigger than it
+    ...
+
+
+def resample_image():
+    # TODO resample the image to a common voxel size, e.g., 1mm isotropic
+    ...
+
+
+def register_images():
+    # TODO register the images to a common space, e.g., using mutual information
+    ...
+
+
+# Example usage
 if __name__ == "__main__":
-    # Ejemplo de uso de la función
-    import os
-    import sys
-
-
-    import matplotlib.pyplot as plt
     from DataAnalyzer import DataAnalyzer
 
-    ruta = "/home/guest/work/Datasets/picai_folds/picai_images_fold0/10000"
-    imgname = "10000_1000000_t2w.mha"
+    # we will pick several random images, apply preprocessing and save them in the ./imgs dir,
+    # each with its corresponding index
 
-    input_path = os.path.join(ruta, imgname)  # Cambia por tu ruta
-    output_path = "./imagen_preprocesada.nii.gz"
-    
-    # Cargar la imagen
-    img = sitk.ReadImage(input_path)
-    img_array = sitk.GetArrayFromImage(img)
+    data_analyzer = DataAnalyzer("/home/guest/work/Datasets")
+    data_analyzer.regex = ".*_t2w.mha"
 
-    # Example usage of norm:
-    #img_out = normalize_image(img, method='minmax')
+    # use custom funtion to pick random directories
+    rfolders = data_analyzer.pick_random(
+        "picai_folds/picai_images_fold0/", 3, type="dir"
+    )
 
+    for i, folder in enumerate(rfolders, start=1):
 
-    # example usage of n4_correction:
-    img_out, log_bias = n4_bias_field_correction(img)
+        img_path = data_analyzer.pick_random(
+            folder, 1, type="file")[0]  # unpack because it returns a list
+        print(f"Processing image: {img_path}")
 
-    # example usage of automatic mask:
-    #img_out = create_automatic_mask(img)
-    
-    # TODO este método parece devolver mierda, revisar. Mira en los papers si ellos lo usa
-    # TODO: mirar si el metodo es necesario, probar n4 sin
-    # si lo es incorporar a n4, si no quitarlo
-    # luego probar n4, y luego pasar al registro, roi y resampleo. 
-    # estudiar si hacer interpolacion de contornos d las mascaras?
-    
-    # Guardar la imagen procesada
-    sitk.WriteImage(img_out, output_path)
-    
-    logb_path = "./log_bias.nii.gz"
-    sitk.WriteImage(log_bias, logb_path)
+        img = sitk.ReadImage(img_path)
+        img = ensure_3d(img)
+        img_array = sitk.GetArrayFromImage(img)
 
+        # Apply N4 correction
+        img_out, log_bias = n4_bias_field_correction(img)
 
-    # Mostrar la imagen procesada
-    da = DataAnalyzer(".")
-    da.show_image(input_path, logb_path, output_path, save="test.png")
+        # Example usage of norm:
+        # img_out = normalize_image(img, method='minmax')
 
-    da.image_intensity_histogram(input_path, plot=True, save="histogram_1.png")
-    da.image_intensity_histogram(output_path, plot=True, save="histogram_2.png")
+        # example usage of n4_correction:
+        img_out, log_bias = n4_bias_field_correction(img)
+
+        # example usage of automatic mask:
+        # img_out = create_automatic_mask(img)
+
+        # TODO this method seems to return garbage, review. Check in the papers if they use it
+        # TODO: check if the method is necessary, test n4 without
+        # if it is, incorporate into n4, if not remove it
+        # then test n4, and then move on to registration, roi and resampling.
+        # study whether to interpolate contours of the masks?
+
+        # Save the processed images
+        output_path = f"./imgs/processed_image_{i}.nii.gz"
+        sitk.WriteImage(img_out, output_path)
+        logb_path = f"./imgs/log_bias_{i}.nii.gz"
+        sitk.WriteImage(log_bias, logb_path)
+
+        da = DataAnalyzer(".")
+        da.show_image(img_path, logb_path, output_path, save=f"./imgs/test_{i}.png")
+
+        # histograms help understand how the processing affects intensity distribution
+        da.image_intensity_histogram(
+            img_path, plot=True, save=f"./imgs/histogram_original_{i}.png"
+        )
+        da.image_intensity_histogram(
+            output_path, plot=True, save=f"./imgs/histogram_processed_{i}.png"
+        )
