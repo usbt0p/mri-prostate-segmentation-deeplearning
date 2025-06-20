@@ -114,6 +114,8 @@ class DataAnalyzer(object):
                 
                 # Take a slice of the image (e.g., the middle slice)
                 if image_array.ndim == 3:
+                    # TODO add support for choosing the slice
+                    # For now, we just take the middle slice
                     image_array = image_array[image_array.shape[0] // 2, :, :]
                 elif image_array.ndim == 2:
                     image_array = image_array[:, :]
@@ -330,6 +332,22 @@ class DataAnalyzer(object):
             plt.show()
 
         return hist, bin_edges
+
+    def pick_random(self, path,  num : int, type="file"):
+        
+        # if the folder has folders, pick a random one, and if not, then pick a random file
+        path = self.abspath(path)
+        if type == "file":
+            items = list(self.get_files(path, self.regex))
+        elif type == "dir":
+            items = list(self.get_dirs(path))
+        else:
+            raise ValueError("type must be 'file' or 'dir'")
+        
+        choices = np.random.choice(items, num, replace=False)
+
+        return [os.path.join(path, c) for c in choices]
+        
     
 
 if __name__ == "__main__":
