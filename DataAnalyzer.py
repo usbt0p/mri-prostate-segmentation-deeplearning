@@ -79,9 +79,9 @@ class DataAnalyzer(object):
             if os.path.isfile(os.path.join(path, f)):
                 if regex:
                     if regex.match(f):
-                        yield f
+                        yield os.path.join(path, f)
                 else:
-                    yield f
+                    yield os.path.join(path, f)
 
     def show_image(self, *image_paths, save : str =None):
         """
@@ -200,7 +200,7 @@ class DataAnalyzer(object):
                         # e.g. AnatomicalOrientation = ASL
                         return line.split("=", 1)[-1].strip()
                 except Exception:
-                    print(f"Error decoding line in {filepath}: {line}")
+                    print(f"Error decoding line in {filepath}: {line[:15]}...")
                     break  # we break when the data is not utf-8 encoded (hex or binary stuff in mri imaging)
         return None
 
@@ -353,6 +353,7 @@ class DataAnalyzer(object):
 if __name__ == "__main__":
     from time import perf_counter
     from os.path import join
+    import random
 
     # create an analyzer object with the root path to the dataset and
     analyzer = DataAnalyzer("/home/guest/work/Datasets")
@@ -365,29 +366,41 @@ if __name__ == "__main__":
 
     # use this regex to filter the files
     analyzer.regex = "t2.nii.gz" #(.*_t2w.mha$)|(.*_sag.mha$)|(.*_cor.mha$)"
-    # res = analyzer.collect_metadata_to_dataframe("prostate158/prostate158_train/train/110") #"picai_folds/picai_images_fold0/10189")
-    # print(res)
+    
+    def test_histogram(analyzer):
+        analyzer.image_intensity_histogram("prostate158/prostate158_train/train/111/t2.nii.gz", plot=True)
 
-    analyzer.image_intensity_histogram("prostate158/prostate158_train/train/111/t2.nii.gz", plot=True)
+    def test_show_image(analyzer, paths):
 
-    # start = perf_counter()
-    # df = analyzer.collect_metadata_from_subdirs("picai_folds/picai_images_fold0")
-    # print(df)
-    # print(perf_counter() - start, "seconds")
+        d = "picai_folds/picai_images_fold0"
+        dirs = list(analyzer.get_dirs(d))
+        random_dir = random.choice(dirs)
+        files_in_dir = analyzer.get_files(join(d, random_dir), ".*_t2w.mha$")
 
-    # import random
+        # we have to do this because get_files is a generator
+        name = list(files_in_dir)[0]
+        i1 = join(d, random_dir, name)
+        # get the corresponding nii.gz file that masks the image
+        nii = name.split("_t2w")[0] + ".nii.gz"
+        i2 = join(paths['picai_labels_zonal'], nii)
 
-    # # pick a random folder and set the name of a file inside as the prefix
-    # d = "picai_folds/picai_images_fold0"
-    # dirs = list(analyzer.get_dirs(d))
-    # random_dir = random.choice(dirs)
-    # files_in_dir = analyzer.get_files(join(d, random_dir), ".*_t2w.mha$")
+        analyzer.show_image(i1, i2, save="./test.png")
 
-    # # we have to do this because get files is a generator
-    # name = list(files_in_dir)[0] 
-    # i1 = join(d, random_dir, name)
-    # # get the corresponding nii.gz file that masks the image
-    # nii = name.split("_t2w")[0] + ".nii.gz"
-    # i2 = join(paths['picai_labels_zonal'], nii)
+    def test_collect_metadata(analyzer):
+        # Test collect_metadata_to_dataframe
+        analyzer.regex = "t2.nii.gz"
+        res = analyzer.collect_metadata_to_dataframe("prostate158/prostate158_train/train/110")
+        print(res)
 
-    # analyzer.show_image(i1, i2, save="./test.png")
+        # Test collect_metadata_from_subdirs
+        start = perf_counter()
+        analyzer.regex = "(.*_t2w.mha$)|(.*_sag.mha$)|(.*_cor.mha$)"
+        df = analyzer.collect_metadata_from_subdirs("picai_folds/picai_images_fold0", 
+                                                    max_workers=analyzer.cpus)
+        print(df)
+        print(perf_counter() - start, "seconds")
+
+    # Example usage:
+    # test_histogram(analyzer)
+    # test_show_image(analyzer, paths)
+    test_collect_metadata(analyzer)
