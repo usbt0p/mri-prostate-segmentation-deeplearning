@@ -63,8 +63,9 @@ def create_automatic_mask(
             outsideValue=0,
         )
 
-    # Morphological operations to clean the mask
-    mask = sitk.BinaryMorphologicalClosing(mask, [3, 3, 3])
+    # TODO malke this function work
+    # # Morphological operations to clean the mask
+    mask = sitk.BinaryMorphologicalClosing(mask, [3, 3, 3])    
     mask = sitk.BinaryFillhole(mask)
 
     return sitk.Cast(mask, sitk.sitkUInt8)
@@ -221,9 +222,45 @@ def get_region_of_interest(image: sitk.Image, mask: sitk.Image, margin: int = 30
     return roi
 
 
-def resample_image():
-    # TODO resample the image to a common voxel size, e.g., 1mm isotropic
-    ...
+def resample_image(
+    image: sitk.Image,
+    out_spacing: tuple = (0.5, 0.5, 3.0), # TODO choose the best based on data exploration
+    interpolator=sitk.sitkLinear,
+    default_value: float = 0.0,
+) -> sitk.Image:
+    """
+    Resample the image to a given isotropic voxel size.
+
+    Parameters:
+        image (sitk.Image): Input image.
+        out_spacing (tuple): Desired output spacing (z, y, x) in mm.
+        interpolator: SimpleITK interpolator (default: sitkLinear).
+        default_value (float): Value for areas outside the original image.
+
+    Returns:
+        sitk.Image: Resampled image.
+    """
+    original_spacing = image.GetSpacing()
+    original_size = image.GetSize()
+    out_spacing = tuple(float(s) for s in out_spacing)
+
+    # Compute new size to preserve physical dimensions
+    out_size = [
+        int(round(osz * ospc / nspc))
+        for osz, ospc, nspc in zip(original_size, original_spacing, out_spacing)
+    ]
+
+    resampler = sitk.ResampleImageFilter()
+    resampler.SetOutputSpacing(out_spacing)
+    resampler.SetSize(out_size)
+    resampler.SetOutputDirection(image.GetDirection())
+    resampler.SetOutputOrigin(image.GetOrigin())
+    resampler.SetInterpolator(interpolator)
+    resampler.SetDefaultPixelValue(default_value)
+    resampler.SetOutputPixelType(image.GetPixelID())
+
+    resampled = resampler.Execute(image)
+    return resampled
 
 
 def register_images():
@@ -251,6 +288,10 @@ if __name__ == "__main__":
 
     # TODO determine the upscaling / downscaling process: 
     # order matters here, when to do it? 
+
+    # TODO in resampling: must conserve the quality, i.e. not resample to a bigger 
+    # voxel size or details will be lost!!
+    # do data exploration to find the voxel size counts and usee it to inform the new size
 
     # TODO REMEMBER YOU CHANGED THE GET_FILE GENERATOR TO RETURN ABS PATHS!! MIGH INTRODUCE
     # SOME HEAVY REGRESSIONS!!!
@@ -308,8 +349,6 @@ if __name__ == "__main__":
             da.show_image(
                 img_path, mask_path, output_path, save=f"./imgs/roi_test_{i}.png"
             )        
-    
-    roi_test()
             
     def n4_test():
         
@@ -362,3 +401,140 @@ if __name__ == "__main__":
             da.image_intensity_histogram(
                 output_path, plot=True, save=f"./imgs/histogram_processed_{i}.png"
             )
+
+    def test_automatic_mask(): # TODO work in progress, make useful
+        # select a specific file that contains an obvious background
+        img_path = next(data_analyzer.get_files(
+            "picai_folds/picai_images_fold0/11392", #10947, 
+            regex=".*_t2w.mha"
+        ))
+
+        img_mask = create_automatic_mask(
+            load_image(img_path), 
+            threshold_method="percentile"
+        )
+
+       
+        # Save the mask
+        mask_path = "./imgs/automask.nii.gz"
+        sitk.WriteImage(img_mask, mask_path)
+
+        data_analyzer.data_root = "." 
+        data_analyzer.show_image(
+            img_path, 
+            mask_path,
+            save="./imgs/automask.png"
+        )
+
+    def test_resample_images(verbose=True):
+        # use custom funtion to pick random directories
+        rfolders = data_analyzer.pick_random(
+            "picai_folds/picai_images_fold0/", 3, type="dir"
+        )
+
+        for i, folder in enumerate(rfolders, start=1):
+
+            img_path = data_analyzer.pick_random(
+                folder, 1, type="file")[0]
+            print(f"Processing image: {img_path}")
+
+            img = load_image(img_path)
+            img_resampled = resample_image(img)
+
+            output_path = f"./imgs/resampled_image_{i}.nii.gz"
+            sitk.WriteImage(img_resampled, output_path)
+
+            da = DataAnalyzer(".")
+            da.show_image(
+                img_path, output_path, save=f"./imgs/resample_test_{i}.png"
+            )
+
+            if verbose: 
+                resample_verbose_evaluation(img, img_resampled, i)
+                
+
+    def test_resample_mask(verbose=True):
+        # use custom funtion to pick random directories
+        rfolders = data_analyzer.pick_random(
+            "picai_folds/picai_images_fold0/", 3, type="dir"
+        )
+
+        for i, folder in enumerate(rfolders, start=1):
+
+            img_path = data_analyzer.pick_random(
+                folder, 1, type="file")[0]
+            print(f"Processing image: {img_path}")
+
+            img = load_image(img_path)
+
+            mask_path = list(data_analyzer.get_files(
+                paths["picai_labels_zonal"], 
+                regex=os.path.basename(img_path)[0:13]
+            ))[0]
+
+            print(f"Using mask: {mask_path}")
+            mask = load_image(mask_path)
+
+            # NOTE WE CHANGE THE INTERPOLATOR!! nearest neighbor works better for masks
+            mask_resampled = resample_image(mask, interpolator=sitk.sitkNearestNeighbor)
+
+            output_path = f"./imgs/resampled_mask_{i}.nii.gz"
+            sitk.WriteImage(mask_resampled, output_path)
+
+            da = DataAnalyzer(".")
+            da.show_image(
+                img_path, mask_path, output_path, save=f"./imgs/resample_mask_test_{i}.png"
+            )
+
+            if verbose:
+                resample_verbose_evaluation(img, mask_resampled, i)
+                
+    def resample_verbose_evaluation(img_original, img_resampled, i):
+        # print info to evaluate the images
+
+        def describe_image(img):
+                    print("Size (voxels):", img.GetSize())
+                    print("Spacing (mm):", img.GetSpacing())
+                    print("Origin:", img.GetOrigin())
+                    print("Direction:", img.GetDirection())
+
+        def absolute_difference(original_img, resampled_img):
+            # this compares the original and resampled images voxel by voxel
+            # useful to check the effect of interpolation in the resampling process, 
+            # since both are in the same space but the original is not interpolated
+            
+            # Reconvertir ambas imágenes a float para restarlas
+            original = sitk.Cast(original_img, sitk.sitkFloat32)
+            resampled = sitk.Cast(resampled_img, sitk.sitkFloat32)
+
+            resampler = sitk.ResampleImageFilter()
+            resampler.SetReferenceImage(resampled)
+            resampler.SetInterpolator(sitk.sitkLinear) # ASSUMEs linear interpolation
+            resampler.SetTransform(sitk.Transform())
+            original = resampler.Execute(original)
+
+            # Para comparar voxel a voxel, deben estar alineadas (mismo tamaño y spacing)
+            # Si no lo están, primero registra o reinterpola la original al espacio de la resampleada
+            diff = sitk.Abs(original - resampled)
+            diff_arr = sitk.GetArrayFromImage(diff)
+            print("MAE (error medio absoluto):", diff_arr.mean())
+            print("Max diff:", diff_arr.max())
+
+        print(f"Original image {i}:")
+        describe_image(img_original)
+        print(f"Resampled image {i}:")
+        describe_image(img_resampled)
+        absolute_difference(img_original, img_resampled)
+        print("-" * 40)
+
+
+    # Uncomment the function you want to test
+    # roi_test()
+    # n4_test()
+    #test_automatic_mask()
+    test_resample_mask()
+
+    # clean all .nii.gz files in the imgs folder after finished
+    for file in os.listdir("./imgs"):
+        if file.endswith(".nii.gz"):
+            os.remove(os.path.join("./imgs", file))
