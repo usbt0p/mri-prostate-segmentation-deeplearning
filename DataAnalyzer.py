@@ -13,21 +13,25 @@ import SimpleITK as sitk
 
 
 class DataAnalyzer(object):
-    """A class for analyzing medical imaging data.
+    """
+    A class for analyzing medical imaging data.
+
     This class provides methods to read and analyze image files, extract metadata,
     and visualize images. It is designed to work with directories containing medical
     imaging data, such as MRI scans, and can handle both 2D and 3D images.
 
-    Beware this heavily relies on setting absolte paths in each function to work properly.
-    Every function except inner helpers (_functio_name) expects a path relative to the data root directory.
+    .. warning::
+        This heavily relies on setting absolute paths in each function to work properly.
+        Every function except inner helpers (prefixed with an underscore) expects a path
+        relative to the data root directory.
     """
 
     def __init__(self, data_root):
         """
-        Initializes the DataAnalyzer with a root directory for data.
+        Initialize the DataAnalyzer with a root directory for data.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         data_root : str
             The root directory where the data is stored.
         """
@@ -40,10 +44,34 @@ class DataAnalyzer(object):
         self.cpus = os.cpu_count()
 
     def abspath(self, path):
+        """
+        Get the absolute path by joining the data root with the given path.
+
+        Parameters
+        ----------
+        path : str
+            Relative path from the data root.
+
+        Returns
+        -------
+        str
+            Absolute path.
+        """
         return os.path.join(self.data_root, path)
 
     def get_dirs(self, path):
-        """Generator that yields directory names in the specified path.
+        """
+        Yield directory names in the specified path.
+
+        Parameters
+        ----------
+        path : str
+            Relative path from the data root.
+
+        Yields
+        ------
+        str
+            Directory names in the specified path.
         """
         path = self.abspath(path)
         if not os.path.exists(path):
@@ -55,15 +83,17 @@ class DataAnalyzer(object):
 
     def get_files(self, path, regex=None):
         """
-        Generator that yields files in the specified directory that match the given regex pattern.
-        Parameters:
-        -----------
+        Yield files in the specified directory that match the given regex pattern.
+
+        Parameters
+        ----------
         path : str
             The directory path to search for files.
         regex : str, optional
             A regex pattern to filter the files. If None, all files are yielded.
-        Yields:
-        -------
+
+        Yields
+        ------
         str
             Filename that matches the regex pattern in the specified directory.
         """
@@ -85,14 +115,17 @@ class DataAnalyzer(object):
 
     def show_image(self, *image_paths, save : str =None):
         """
-        Opens and displays an image.
+        Open and display one or more images.
+
         Only images supported by SimpleITK.ReadImage are supported.
         By default, 3D images show the middle slice.
 
-        Parameters:
-        -----------
-        image_path : str
-            Path to the image file.
+        Parameters
+        ----------
+        *image_paths : str
+            Paths to the image files (relative to data root).
+        save : str, optional
+            If provided, saves the figure to this path (as PNG).
         """
         try:
             # Create a figure with subplots for each image
@@ -138,15 +171,16 @@ class DataAnalyzer(object):
         
 
     def is_empty_mask(self, path):
-        """Checks if a mask file is empty (contains only zero values).
-    
-        Parameters:
-        -----------
+        """
+        Check if a mask file is empty (contains only zero values).
+
+        Parameters
+        ----------
         path : str
-            Path to the mask file.
-    
-        Returns:
-        --------
+            Path to the mask file (relative to data root).
+
+        Returns
+        -------
         bool
             True if the mask is empty, False otherwise.
         """
@@ -161,14 +195,24 @@ class DataAnalyzer(object):
     
     
     def count_and_find_non_empty_masks(self, folder):
-        """Uses SimpleITK to count non-empty masks in a folder.
-        Assumes the files inside the dir are actually masks.
-    
-        Returns:
-        --------
-        tuple: (non_empty_count, empty_list)
-        - non_empty_count: Number of non-empty mask files.
-        - empty_list: List of empty mask filenames.
+        """
+        Count non-empty masks in a folder using SimpleITK.
+
+        Assumes the files inside the directory are actually masks.
+
+        Parameters
+        ----------
+        folder : str
+            Path to the folder containing mask files (relative to data root).
+
+        Returns
+        -------
+        tuple
+            (non_empty_count, empty_list)
+            - non_empty_count : int
+                Number of non-empty mask files.
+            - empty_list : list of str
+                List of empty mask filenames.
         """
         folder = self.abspath(folder)
         mask_files = self.get_files(folder, regex=self.regex)
@@ -184,11 +228,23 @@ class DataAnalyzer(object):
 
     def _get_header_value(self, filepath, key):
         """
-        Reads the header of an image file and returns the value for the given key.
-        Used as a fallback if the metadata is not available trough SimpleITK.
+        Read the header of an image file and return the value for the given key.
 
-        Implemented to read only the header, the class will break out of the line-reading
-        loop when it encounters a line that cannot be decoded as UTF-8.
+        Used as a fallback if the metadata is not available through SimpleITK.
+        Only reads the header; breaks out of the line-reading loop when it encounters
+        a line that cannot be decoded as UTF-8.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the image file.
+        key : str
+            Metadata key to search for.
+
+        Returns
+        -------
+        str or None
+            Value for the given key, or None if not found.
         """
 
         with open(filepath, "rb") as f:
@@ -206,7 +262,17 @@ class DataAnalyzer(object):
 
     def parse_metadata_file(self, filepath):
         """
-        Parses an image file and extracts required fields using SimpleITK.
+        Parse an image file and extract required fields using SimpleITK.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the image file (relative to data root).
+
+        Returns
+        -------
+        dict
+            Dictionary with extracted metadata fields.
         """
         abspath = self.abspath(filepath)
         info = {
@@ -255,7 +321,17 @@ class DataAnalyzer(object):
 
     def collect_metadata_to_dataframe(self, folder):
         """
-        Collects metadata from all files in a folder into a pandas DataFrame.
+        Collect metadata from all files in a folder into a pandas DataFrame.
+
+        Parameters
+        ----------
+        folder : str
+            Path to the folder containing files (relative to data root).
+
+        Returns
+        -------
+        pandas.DataFrame
+            DataFrame containing metadata for all files.
         """
 
         folder = self.abspath(folder)
@@ -271,7 +347,19 @@ class DataAnalyzer(object):
         return df
 
     def _file_paths_gen(self, parent_dir):
-        """Generator that yields file paths of all files in subdirectories"""
+        """
+        Yield file paths of all files in subdirectories.
+
+        Parameters
+        ----------
+        parent_dir : str
+            Path to the parent directory (relative to data root).
+
+        Yields
+        ------
+        str
+            File paths in subdirectories.
+        """
         for subdir in self.get_dirs(parent_dir):
             subdir_path = os.path.join(parent_dir, subdir)
             meta_files = self.get_files(subdir_path, self.regex)
@@ -280,9 +368,22 @@ class DataAnalyzer(object):
 
     def collect_metadata_from_subdirs(self, parent_dir, max_workers=None):
         """
-        Collects metadata from all files in all subdirectories into a
-        pandas DataFrame using parallel processing. Uses the maximu
-        number of CPUs available or a specified number of workers unless specified otherwise.
+        Collect metadata from all files in all subdirectories into a pandas DataFrame
+        using parallel processing.
+
+        Uses the maximum number of CPUs available or a specified number of workers.
+
+        Parameters
+        ----------
+        parent_dir : str
+            Path to the parent directory (relative to data root).
+        max_workers : int, optional
+            Number of worker processes to use.
+
+        Returns
+        -------
+        pandas.DataFrame
+            DataFrame containing metadata for all files in subdirectories.
         """
         parent_dir = self.abspath(parent_dir)
         self.cpus if max_workers is None else max_workers
@@ -298,20 +399,27 @@ class DataAnalyzer(object):
     
     def image_intensity_histogram(self, image_path, bins=128, plot=False, save=None):
         """
-        Computes the histogram of pixel intensities for a given image.
-        
-        Parameters:
-        -----------
+        Compute the histogram of pixel intensities for a given image.
+
+        Parameters
+        ----------
         image_path : str
-            Path to the image file.
+            Path to the image file (relative to data root).
         bins : int, optional
-            Number of bins for the histogram. Default is 256.
-        
-        Returns:
-        --------
-        tuple: (histogram, bin_edges)
-            histogram: The computed histogram of pixel intensities.
-            bin_edges: The edges of the bins used in the histogram.
+            Number of bins for the histogram. Default is 128.
+        plot : bool, optional
+            If True, plot the histogram. Default is False.
+        save : str, optional
+            If provided, saves the plot to this path (as PNG).
+
+        Returns
+        -------
+        tuple
+            (histogram, bin_edges)
+            - histogram : numpy.ndarray
+                The computed histogram of pixel intensities.
+            - bin_edges : numpy.ndarray
+                The edges of the bins used in the histogram.
         """
         image_path = self.abspath(image_path)
         image = sitk.ReadImage(self.abspath(image_path))
@@ -334,6 +442,23 @@ class DataAnalyzer(object):
         return hist, bin_edges
 
     def pick_random(self, path,  num : int, type="file"):
+        """
+        Pick a random selection of files or directories from a given path.
+
+        Parameters
+        ----------
+        path : str
+            Path to the folder (relative to data root).
+        num : int
+            Number of items to pick.
+        type : {'file', 'dir'}, optional
+            Whether to pick files or directories. Default is 'file'.
+
+        Returns
+        -------
+        list of str
+            List of absolute paths to the randomly selected items.
+        """
         
         # if the folder has folders, pick a random one, and if not, then pick a random file
         path = self.abspath(path)
