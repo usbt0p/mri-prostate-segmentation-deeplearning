@@ -350,9 +350,10 @@ class DataAnalyzer(object):
         df = pd.DataFrame(records)
         return df
 
-    def _file_paths_gen(self, parent_dir):
+    def file_paths_gen(self, parent_dir):
         """
         Yield file paths of all files in subdirectories.
+        Useful for iterating over patient directories to get a file.
 
         Parameters
         ----------
@@ -397,7 +398,7 @@ class DataAnalyzer(object):
         ) as executor:
             records = list(
                 executor.map(self.parse_metadata_file, 
-                self._file_paths_gen(parent_dir))
+                self.file_paths_gen(parent_dir))
             )
         return pd.DataFrame(records)
     

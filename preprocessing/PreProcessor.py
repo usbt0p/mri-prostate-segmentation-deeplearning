@@ -183,6 +183,9 @@ def get_region_of_interest(image: sitk.Image, mask: sitk.Image, margin: int = 30
     Returns:
         sitk.Image: Cropped ROI image.
     """
+    # TODO CHANGE THIS!!  this preprocessing step cant be applied to images that do not have a mask
+    # therefore, we cant use it for testing or validation, or inference!!
+
     # Convert mask to numpy array and find nonzero coordinates
     mask_array = sitk.GetArrayFromImage(mask)
     coords = np.argwhere(mask_array > 0)
@@ -192,6 +195,7 @@ def get_region_of_interest(image: sitk.Image, mask: sitk.Image, margin: int = 30
     # Compute center of the mask in array coordinates (z, y, x)
     center = ((min_coords + max_coords) / 2).astype(int)
 
+    
     # Compute the maximum extent (span) in any direction
     extent = (max_coords - min_coords).max()
     # Add margin to the extent
@@ -271,9 +275,9 @@ def register_images():
 # Example usage
 if __name__ == "__main__":
 
-    # TODO see if the method of clipping to bounds with some margin is good
+    # TODO get ROI: CURRENT METHOD DOESNT WORK ON DATA THAT DOES NOT HAVE A MASK
     # 
-    # TODO figuer out if different prepsocessing steps are order - invariant,
+    # TODO figure out if different prepsocessing steps are order - invariant,
     # or if they should be applied in a specific order.
     #
     # for example, if we apply n4 bias field correction, should we apply it before or after
@@ -292,9 +296,6 @@ if __name__ == "__main__":
     # TODO in resampling: must conserve the quality, i.e. not resample to a bigger 
     # voxel size or details will be lost!!
     # do data exploration to find the voxel size counts and usee it to inform the new size
-
-    # TODO REMEMBER YOU CHANGED THE GET_FILE GENERATOR TO RETURN ABS PATHS!! MIGH INTRODUCE
-    # SOME HEAVY REGRESSIONS!!!
 
     # TODO other stuff:
     # 1. download the remaining datasets (script)
@@ -365,14 +366,7 @@ if __name__ == "__main__":
 
             img = sitk.ReadImage(img_path)
             img = ensure_3d(img)
-            img_array = sitk.GetArrayFromImage(img)
-
-            # Apply N4 correction
-            img_out, log_bias = n4_bias_field_correction(img)
-
-            # Example usage of norm:
-            # img_out = normalize_image(img, method='minmax')
-
+            
             # example usage of n4_correction:
             img_out, log_bias = n4_bias_field_correction(img)
 
@@ -393,6 +387,41 @@ if __name__ == "__main__":
 
             da = DataAnalyzer(".")
             da.show_image(img_path, logb_path, output_path, save=f"./imgs/test_{i}.png")
+
+            # histograms help understand how the processing affects intensity distribution
+            da.image_intensity_histogram(
+                img_path, plot=True, save=f"./imgs/histogram_original_{i}.png"
+            )
+            da.image_intensity_histogram(
+                output_path, plot=True, save=f"./imgs/histogram_processed_{i}.png"
+            )
+
+    def normalization_test():
+        
+        # use custom funtion to pick random directories
+        rfolders = data_analyzer.pick_random(
+            "picai_folds/picai_images_fold0/", 3, type="dir"
+        )
+
+        for i, folder in enumerate(rfolders, start=1):
+
+            img_path = data_analyzer.pick_random(
+                folder, 1, type="file")[0]  # unpack because it returns a list
+            print(f"Processing image: {img_path}")
+
+            img = sitk.ReadImage(img_path)
+            img = ensure_3d(img)
+            img_array = sitk.GetArrayFromImage(img)
+
+            # Example usage of norm:
+            img_out = normalize_image(img, method='minmax')
+
+            # Save the processed images
+            output_path = f"./imgs/processed_image_{i}.nii.gz"
+            sitk.WriteImage(img_out, output_path)
+            
+            da = DataAnalyzer(".")
+            da.show_image(img_path, output_path, save=f"./imgs/test_{i}.png")
 
             # histograms help understand how the processing affects intensity distribution
             da.image_intensity_histogram(
@@ -530,9 +559,9 @@ if __name__ == "__main__":
 
     # Uncomment the function you want to test
     # roi_test()
-    # n4_test()
+    n4_test()
     #test_automatic_mask()
-    test_resample_mask()
+    #test_resample_mask()
 
     # clean all .nii.gz files in the imgs folder after finished
     for file in os.listdir("./imgs"):
