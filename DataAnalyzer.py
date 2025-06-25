@@ -107,10 +107,11 @@ class DataAnalyzer(object):
 
         for f in os.listdir(path):
             if os.path.isfile(os.path.join(path, f)):
-                if regex:
+                if regex: # use the regex if provided, if not just yield all files
                     if regex.match(f):
                         yield os.path.join(path, f)
                 else:
+                    # TODO this doesnt use self.regex
                     yield os.path.join(path, f)
 
     def show_image(self, *image_paths, save : str =None):
@@ -277,8 +278,9 @@ class DataAnalyzer(object):
         abspath = self.abspath(filepath)
         info = {
             "filename": os.path.basename(filepath),
-            "orientation": None,
             "dim_size": None,
+            "spacing": None,
+            "orientation": None,
             "prostate_volume": None,
             "vendor": None,
             "mri_name": None,
@@ -288,6 +290,8 @@ class DataAnalyzer(object):
             image = sitk.ReadImage(abspath)
             # DimSize from image size
             info["dim_size"] = image.GetSize()
+            # get spacing and round to 3 decimal places
+            info["spacing"] = tuple(round(s, 3) for s in image.GetSpacing())
             # Try to get metadata fields if present
             keys = image.GetMetaDataKeys()
             
