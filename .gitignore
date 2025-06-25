@@ -3,6 +3,8 @@
 *.png
 *.nii.gz
 imgs/*
+# papermill output
+output.ipynb
 
 ## Default stuff
 # Byte-compiled / optimized / DLL files
