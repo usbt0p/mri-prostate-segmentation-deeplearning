@@ -65,7 +65,7 @@ def create_automatic_mask(
 
     # TODO malke this function work
     # # Morphological operations to clean the mask
-    mask = sitk.BinaryMorphologicalClosing(mask, [3, 3, 3])    
+    mask = sitk.BinaryMorphologicalClosing(mask, [3, 3, 3])
     mask = sitk.BinaryFillhole(mask)
 
     return sitk.Cast(mask, sitk.sitkUInt8)
@@ -156,6 +156,7 @@ def ensure_3d(image: sitk.Image) -> sitk.Image:
     else:
         raise ValueError(f"Unsupported image dimension: {dim}")
 
+
 def load_image(image_path: str) -> sitk.Image:
     """
     Reads a 3D image from a file path and does appropriate processing.
@@ -170,65 +171,42 @@ def load_image(image_path: str) -> sitk.Image:
     return ensure_3d(image)
 
 
-def get_region_of_interest(image: sitk.Image, mask: sitk.Image, margin: int = 30) -> sitk.Image:
+def get_region_of_interest(image: sitk.Image, crop: float) -> sitk.Image:
     """
-    Extract a region of interest (ROI) centered on the nonzero region of the mask,
-    expanded by a given margin.
+    Extract a region of interest (ROI) by cropping a percentage of the image size
+    around the center.
 
     Parameters:
         image (sitk.Image): Input image.
-        mask (sitk.Image): Binary mask of the region (e.g., prostate).
-        margin (int): Number of voxels to expand the bounding box in each direction.
+        crop (float): Fraction of the image size to retain (0 < crop <= 1.0).
 
     Returns:
         sitk.Image: Cropped ROI image.
     """
-    # TODO CHANGE THIS!!  this preprocessing step cant be applied to images that do not have a mask
-    # therefore, we cant use it for testing or validation, or inference!!
+    # inspired on: https://huggingface.co/MONAI/prostate_mri_anatomy/blob/0.3.5/scripts/center_crop.py
+    if not (0 < crop <= 1.0):
+        raise ValueError("Crop must be a value between 0 and 1.")
 
-    # Convert mask to numpy array and find nonzero coordinates
-    mask_array = sitk.GetArrayFromImage(mask)
-    coords = np.argwhere(mask_array > 0)
-    min_coords = coords.min(axis=0)
-    max_coords = coords.max(axis=0)
+    # original size and center of the image
+    original_size = image.GetSize()  # (x, y, z)
+    center = [int(dim / 2) for dim in original_size]
 
-    # Compute center of the mask in array coordinates (z, y, x)
-    center = ((min_coords + max_coords) / 2).astype(int)
+    new_size = [int(dim * crop) for dim in original_size]
 
-    
-    # Compute the maximum extent (span) in any direction
-    extent = (max_coords - min_coords).max()
-    # Add margin to the extent
-    box_size = extent + 2 * margin
+    # Compute the start index for cropping
+    start = [max(0, c - ns // 2) for c, ns in zip(center, new_size)]
+    roi = sitk.RegionOfInterest(image, size=new_size, index=start)
 
-    # Ensure box_size is odd for symmetry (optional)
-    if box_size % 2 == 0:
-        box_size += 1
-
-    # Compute start and end indices for each axis
-    half_size = box_size // 2
-    shape = np.array(mask_array.shape)
-    min_box = center - half_size
-    max_box = center + half_size
-
-    # Clip to image bounds
-    min_box = np.maximum(min_box, 0)
-    max_box = np.minimum(max_box, shape - 1)
-
-    # Recompute size in case box was clipped
-    size = max_box - min_box + 1
-
-    # SimpleITK uses z, y, x order for size and index
-    start = [int(x) for x in min_box[::-1]]
-    size = [int(s) for s in size[::-1]]
-
-    roi = sitk.RegionOfInterest(image, size=size, index=start)
     return roi
 
 
 def resample_image(
     image: sitk.Image,
-    out_spacing: tuple = (0.5, 0.5, 3.0), # TODO choose the best based on data exploration
+    out_spacing: tuple = (
+        0.5,
+        0.5,
+        5.0,
+    ),  # TODO choose the best based on data exploration
     interpolator=sitk.sitkLinear,
     default_value: float = 0.0,
 ) -> sitk.Image:
@@ -272,11 +250,22 @@ def register_images():
     ...
 
 
+def describe_image(img: sitk.Image):
+    """
+    Print basic information about the image, such as size, spacing, origin and direction.
+    """
+
+    print("Size (voxels):", img.GetSize())
+    print("Spacing (mm):", tuple(round(s, 3) for s in img.GetSpacing()))
+    print("Origin:", tuple(round(o, 3) for o in img.GetOrigin()))
+    print("Direction:", tuple(round(d, 3) for d in img.GetDirection()))
+
+
 # Example usage
 if __name__ == "__main__":
 
     # TODO get ROI: CURRENT METHOD DOESNT WORK ON DATA THAT DOES NOT HAVE A MASK
-    # 
+    #
     # TODO figure out if different prepsocessing steps are order - invariant,
     # or if they should be applied in a specific order.
     #
@@ -290,17 +279,17 @@ if __name__ == "__main__":
     # TODO for n4 and normalize, some images might need background masking, but it
     # seems top work like shit. any fixes?
 
-    # TODO determine the upscaling / downscaling process: 
-    # order matters here, when to do it? 
+    # TODO determine the upscaling / downscaling process:
+    # order matters here, when to do it?
 
-    # TODO in resampling: must conserve the quality, i.e. not resample to a bigger 
+    # TODO in resampling: must conserve the quality, i.e. not resample to a bigger
     # voxel size or details will be lost!!
     # do data exploration to find the voxel size counts and usee it to inform the new size
 
     # TODO other stuff:
     # 1. download the remaining datasets (script)
     # 2. make some analysis of them
-    # 3. make a pipeline system / figure out if there is one that exists and lets you 
+    # 3. make a pipeline system / figure out if there is one that exists and lets you
     # use custom functions
 
     import os
@@ -313,46 +302,36 @@ if __name__ == "__main__":
     data_analyzer.regex = ".*_t2w.mha"
 
     paths = {
-        "picai_labels_wg" : "picai_labels_all/picai_labels-main/anatomical_delineations/whole_gland/AI/Guerbet23",
-        "picai_labels_zonal" : "picai_labels_all/picai_labels-main/anatomical_delineations/zonal_pz_tz/AI/Yuan23",
-        "picai_folds" : "picai_folds/"
+        "picai_labels_wg": "picai_labels_all/picai_labels-main/anatomical_delineations/whole_gland/AI/Guerbet23",
+        "picai_labels_zonal": "picai_labels_all/picai_labels-main/anatomical_delineations/zonal_pz_tz/AI/Yuan23",
+        "picai_folds": "picai_folds/",
     }
 
     def roi_test():
         # use custom funtion to pick random directories
         rfolders = data_analyzer.pick_random(
-            "picai_folds/picai_images_fold0/", 3, type="dir"
+            "picai_folds/picai_images_fold0/", 4, type="dir"
         )
 
         for i, folder in enumerate(rfolders, start=1):
 
-            img_path = data_analyzer.pick_random(
-                folder, 1, type="file")[0]
+            img_path = data_analyzer.pick_random(folder, 1, type="file")
             print(f"Processing image: {img_path}")
 
-            #"_".join(os.path.basename(img_path).split("_")[0:1])
-            file_id = os.path.basename(img_path)[0:13] 
-                        
-            mask_path = list(data_analyzer.get_files(
-                paths["picai_labels_wg"], 
-                regex=file_id
-            ))[0]
-            print(f"Using mask: {mask_path}")
-
             img = load_image(img_path)
-            mask = load_image(mask_path)
-            
-            roi = get_region_of_interest(img, mask)
+
+            describe_image(img)
+            roi = get_region_of_interest(img, crop=0.6)
+            describe_image(roi)
+
             output_path = f"./imgs/roi_image_{i}.nii.gz"
             sitk.WriteImage(roi, output_path)
 
             da = DataAnalyzer(".")
-            da.show_image(
-                img_path, mask_path, output_path, save=f"./imgs/roi_test_{i}.png"
-            )        
-            
+            da.show_image(img_path, output_path, save=f"./imgs/roi_test_{i}.png")
+
     def n4_test():
-        
+
         # use custom funtion to pick random directories
         rfolders = data_analyzer.pick_random(
             "picai_folds/picai_images_fold0/", 3, type="dir"
@@ -360,13 +339,14 @@ if __name__ == "__main__":
 
         for i, folder in enumerate(rfolders, start=1):
 
-            img_path = data_analyzer.pick_random(
-                folder, 1, type="file")[0]  # unpack because it returns a list
+            img_path = data_analyzer.pick_random(folder, 1, type="file")[
+                0
+            ]  # unpack because it returns a list
             print(f"Processing image: {img_path}")
 
             img = sitk.ReadImage(img_path)
             img = ensure_3d(img)
-            
+
             # example usage of n4_correction:
             img_out, log_bias = n4_bias_field_correction(img)
 
@@ -397,7 +377,7 @@ if __name__ == "__main__":
             )
 
     def normalization_test():
-        
+
         # use custom funtion to pick random directories
         rfolders = data_analyzer.pick_random(
             "picai_folds/picai_images_fold0/", 3, type="dir"
@@ -405,8 +385,9 @@ if __name__ == "__main__":
 
         for i, folder in enumerate(rfolders, start=1):
 
-            img_path = data_analyzer.pick_random(
-                folder, 1, type="file")[0]  # unpack because it returns a list
+            img_path = data_analyzer.pick_random(folder, 1, type="file")[
+                0
+            ]  # unpack because it returns a list
             print(f"Processing image: {img_path}")
 
             img = sitk.ReadImage(img_path)
@@ -414,12 +395,12 @@ if __name__ == "__main__":
             img_array = sitk.GetArrayFromImage(img)
 
             # Example usage of norm:
-            img_out = normalize_image(img, method='minmax')
+            img_out = normalize_image(img, method="minmax")
 
             # Save the processed images
             output_path = f"./imgs/processed_image_{i}.nii.gz"
             sitk.WriteImage(img_out, output_path)
-            
+
             da = DataAnalyzer(".")
             da.show_image(img_path, output_path, save=f"./imgs/test_{i}.png")
 
@@ -431,29 +412,24 @@ if __name__ == "__main__":
                 output_path, plot=True, save=f"./imgs/histogram_processed_{i}.png"
             )
 
-    def test_automatic_mask(): # TODO work in progress, make useful
+    def test_automatic_mask():  # TODO work in progress, make useful
         # select a specific file that contains an obvious background
-        img_path = next(data_analyzer.get_files(
-            "picai_folds/picai_images_fold0/11392", #10947, 
-            regex=".*_t2w.mha"
-        ))
-
-        img_mask = create_automatic_mask(
-            load_image(img_path), 
-            threshold_method="percentile"
+        img_path = next(
+            data_analyzer.get_files(
+                "picai_folds/picai_images_fold0/11392", regex=".*_t2w.mha"  # 10947,
+            )
         )
 
-       
+        img_mask = create_automatic_mask(
+            load_image(img_path), threshold_method="percentile"
+        )
+
         # Save the mask
         mask_path = "./imgs/automask.nii.gz"
         sitk.WriteImage(img_mask, mask_path)
 
-        data_analyzer.data_root = "." 
-        data_analyzer.show_image(
-            img_path, 
-            mask_path,
-            save="./imgs/automask.png"
-        )
+        data_analyzer.data_root = "."
+        data_analyzer.show_image(img_path, mask_path, save="./imgs/automask.png")
 
     def test_resample_images(verbose=True):
         # use custom funtion to pick random directories
@@ -463,8 +439,7 @@ if __name__ == "__main__":
 
         for i, folder in enumerate(rfolders, start=1):
 
-            img_path = data_analyzer.pick_random(
-                folder, 1, type="file")[0]
+            img_path = data_analyzer.pick_random(folder, 1, type="file")[0]
             print(f"Processing image: {img_path}")
 
             img = load_image(img_path)
@@ -474,13 +449,10 @@ if __name__ == "__main__":
             sitk.WriteImage(img_resampled, output_path)
 
             da = DataAnalyzer(".")
-            da.show_image(
-                img_path, output_path, save=f"./imgs/resample_test_{i}.png"
-            )
+            da.show_image(img_path, output_path, save=f"./imgs/resample_test_{i}.png")
 
-            if verbose: 
+            if verbose:
                 resample_verbose_evaluation(img, img_resampled, i)
-                
 
     def test_resample_mask(verbose=True):
         # use custom funtion to pick random directories
@@ -490,16 +462,16 @@ if __name__ == "__main__":
 
         for i, folder in enumerate(rfolders, start=1):
 
-            img_path = data_analyzer.pick_random(
-                folder, 1, type="file")[0]
+            img_path = data_analyzer.pick_random(folder, 1, type="file")[0]
             print(f"Processing image: {img_path}")
 
             img = load_image(img_path)
 
-            mask_path = list(data_analyzer.get_files(
-                paths["picai_labels_zonal"], 
-                regex=os.path.basename(img_path)[0:13]
-            ))[0]
+            mask_path = list(
+                data_analyzer.get_files(
+                    paths["picai_labels_zonal"], regex=os.path.basename(img_path)[0:13]
+                )
+            )[0]
 
             print(f"Using mask: {mask_path}")
             mask = load_image(mask_path)
@@ -512,33 +484,36 @@ if __name__ == "__main__":
 
             da = DataAnalyzer(".")
             da.show_image(
-                img_path, mask_path, output_path, save=f"./imgs/resample_mask_test_{i}.png"
+                img_path,
+                mask_path,
+                output_path,
+                save=f"./imgs/resample_mask_test_{i}.png",
             )
 
             if verbose:
                 resample_verbose_evaluation(img, mask_resampled, i)
-                
+
     def resample_verbose_evaluation(img_original, img_resampled, i):
         # print info to evaluate the images
 
         def describe_image(img):
-                    print("Size (voxels):", img.GetSize())
-                    print("Spacing (mm):", img.GetSpacing())
-                    print("Origin:", img.GetOrigin())
-                    print("Direction:", img.GetDirection())
+            print("Size (voxels):", img.GetSize())
+            print("Spacing (mm):", img.GetSpacing())
+            print("Origin:", img.GetOrigin())
+            print("Direction:", img.GetDirection())
 
         def absolute_difference(original_img, resampled_img):
             # this compares the original and resampled images voxel by voxel
-            # useful to check the effect of interpolation in the resampling process, 
+            # useful to check the effect of interpolation in the resampling process,
             # since both are in the same space but the original is not interpolated
-            
+
             # Reconvertir ambas imágenes a float para restarlas
             original = sitk.Cast(original_img, sitk.sitkFloat32)
             resampled = sitk.Cast(resampled_img, sitk.sitkFloat32)
 
             resampler = sitk.ResampleImageFilter()
             resampler.SetReferenceImage(resampled)
-            resampler.SetInterpolator(sitk.sitkLinear) # ASSUMEs linear interpolation
+            resampler.SetInterpolator(sitk.sitkLinear)  # ASSUMEs linear interpolation
             resampler.SetTransform(sitk.Transform())
             original = resampler.Execute(original)
 
@@ -556,12 +531,11 @@ if __name__ == "__main__":
         absolute_difference(img_original, img_resampled)
         print("-" * 40)
 
-
     # Uncomment the function you want to test
-    # roi_test()
-    n4_test()
-    #test_automatic_mask()
-    #test_resample_mask()
+    roi_test()
+    # n4_test()
+    # test_automatic_mask()
+    # test_resample_mask()
 
     # clean all .nii.gz files in the imgs folder after finished
     for file in os.listdir("./imgs"):
