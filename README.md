@@ -41,6 +41,7 @@ do data exploration to find the voxel size counts and usee it to inform the new 
 use custom. 
 5. make a resizing function to cast all images to same size after cropping. See if it can be done in the resampling step.
 6. ensure that the convetion in the masks is the same: pz is 1, tz is 2, and background is 0.
+7. abstract the path dictionary to the analyzer, or make a config file or data loader class...
 
 ## Advancement logs
 

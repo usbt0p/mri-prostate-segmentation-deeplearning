@@ -1,5 +1,10 @@
+"""
+A module for testing various preprocessing functions on medical images individually.
+"""
+
 import SimpleITK as sitk
 from preprocessing.PreProcessor import *
+
 
 def roi_test():
     # use custom funtion to pick random directories
@@ -24,6 +29,7 @@ def roi_test():
         da = DataAnalyzer(".")
         da.show_image(img_path, output_path, save=f"./imgs/roi_test_{i}.png")
 
+
 def n4_test():
 
     # use custom funtion to pick random directories
@@ -34,22 +40,15 @@ def n4_test():
     for i, folder in enumerate(rfolders, start=1):
 
         img_path = data_analyzer.pick_random(folder, 1, type="file")
-  
+
         print(f"Processing image: {img_path}")
 
         img = sitk.ReadImage(img_path)
         img = ensure_3d(img)
 
         # example usage of n4_correction:
-        img_out, log_bias = n4_bias_field_correction(img)
+        img_out, log_bias = n4_bias_field_correction(img, return_log_bias=True)
 
-        # example usage of automatic mask:
-        # img_out = create_automatic_mask(img)
-
-        # TODO this method seems to return garbage, review. Check in the papers if they use it
-        # TODO: check if the method is necessary, test n4 without
-        # if it is, incorporate into n4, if not remove it
-        # then test n4, and then move on to registration, roi and resampling.
         # study whether to interpolate contours of the masks?
 
         # Save the processed images
@@ -68,6 +67,7 @@ def n4_test():
         da.image_intensity_histogram(
             output_path, plot=True, save=f"./imgs/histogram_processed_{i}.png"
         )
+
 
 def normalization_test():
 
@@ -103,6 +103,7 @@ def normalization_test():
             output_path, plot=True, save=f"./imgs/histogram_processed_{i}.png"
         )
 
+
 def test_resample_images(verbose=True):
     # use custom funtion to pick random directories
     rfolders = data_analyzer.pick_random(
@@ -125,6 +126,7 @@ def test_resample_images(verbose=True):
 
         if verbose:
             resample_verbose_evaluation(img, img_resampled, i)
+
 
 def test_resample_mask(verbose=True):
     # use custom funtion to pick random directories
@@ -165,6 +167,7 @@ def test_resample_mask(verbose=True):
         if verbose:
             resample_verbose_evaluation(img, mask_resampled, i)
 
+
 def resample_verbose_evaluation(img_original, img_resampled, i):
     # print info to evaluate the images
 
@@ -197,10 +200,11 @@ def resample_verbose_evaluation(img_original, img_resampled, i):
     absolute_difference(img_original, img_resampled)
     print("-" * 40)
 
+
 if __name__ == "__main__":
     import os
     from DataAnalyzer import DataAnalyzer
-    
+
     # we will pick several random images, apply preprocessing and save them in the ./imgs dir,
     # each with its corresponding index
 
