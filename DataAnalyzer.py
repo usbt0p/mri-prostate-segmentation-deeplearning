@@ -3,8 +3,8 @@ import sys
 from re import compile
 import concurrent.futures
 
-#import matplotlib
-#matplotlib.use("Qt5Agg")
+# import matplotlib
+# matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -107,14 +107,16 @@ class DataAnalyzer(object):
 
         for f in os.listdir(path):
             if os.path.isfile(os.path.join(path, f)):
-                if regex: # use the regex if provided, if not just yield all files
+                if regex:  # use the regex if provided, if not just yield all files
                     if regex.match(f):
                         yield os.path.join(path, f)
                 else:
                     # TODO this doesnt use self.regex
                     yield os.path.join(path, f)
 
-    def show_image(self, *image_paths, save : str =None):
+    def show_image(
+        self, *image_or_path, save: str = None, slice: int = None, title: str = None
+    ):
         """
         Open and display one or more images.
 
@@ -123,53 +125,65 @@ class DataAnalyzer(object):
 
         Parameters
         ----------
-        *image_paths : str
-            Paths to the image files (relative to data root).
+        *image_or_path : str or SimpleITK.Image
+            Paths to the image files (relative to data root) or SimpleITK.Image objects.
         save : str, optional
             If provided, saves the figure to this path (as PNG).
+        slice : int, optional
+            The slice index to display for 3D images. If None, the middle slice is shown.
+        title : str, optional
+            Title for the image(s). If multiple images are provided, this is ignored.
         """
         try:
             # Create a figure with subplots for each image
-            num_images = len(image_paths)
+            num_images = len(image_or_path)
             fig, axes = plt.subplots(1, num_images, figsize=(5 * num_images, 5))
-            
+
             # Ensure axes is iterable even for a single image
             if num_images == 1:
                 axes = [axes]
-            
-            for ax, image_path in zip(axes, image_paths):
-                image_path = self.abspath(image_path)
-                
-                # Load the image using SimpleITK
-                image = sitk.ReadImage(image_path)
-                
+
+            for ax, image_path in zip(axes, image_or_path):
+
+                if not isinstance(image_path, sitk.Image):
+                    image_path = self.abspath(image_path)
+
+                    # Load the image using SimpleITK
+                    image = sitk.ReadImage(image_path)
+                    title = title if title else os.path.basename(image_path)
+                else:
+                    image = image_path
+                    title = title if title else "Image"  # TODO this is shitty
+
                 # Convert the image to a numpy array for visualization
                 image_array = sitk.GetArrayViewFromImage(image)
+
                 
-                # Take a slice of the image (e.g., the middle slice)
-                if image_array.ndim == 3:
-                    # TODO add support for choosing the slice
-                    # For now, we just take the middle slice
-                    image_array = image_array[image_array.shape[0] // 2, :, :]
-                elif image_array.ndim == 2:
+                if image_array.ndim == 3: # if the image is 3D
+                    # check if slice is provided, if not, use the middle slice
+                    if slice is not None:
+                        image_array = image_array[slice, :, :]
+                    else:
+                        image_array = image_array[
+                            image_array.shape[0] // 2, :, :
+                        ]                
+                elif image_array.ndim == 2: # in case the image is 2D
                     image_array = image_array[:, :]
-                
+
                 # Display the image on the corresponding axis
                 ax.imshow(image_array, cmap="gray")
-                ax.set_title(os.path.basename(image_path))
+                ax.set_title(title)
                 ax.axis("off")
-            
+
             # Save the figure if requested
             if save is not None:
                 if not save.endswith(".png"):
                     save += ".png"
                 plt.savefig(save, bbox_inches="tight", pad_inches=0.1)
-            
+
             plt.show()
         except Exception as e:
             print(f"Error opening the images: {e}")
-
-        
 
     def is_empty_mask(self, path):
         """
@@ -193,8 +207,7 @@ class DataAnalyzer(object):
         except Exception as e:
             print(f"Error reading {path}: {e}")
             return True  # Treat as empty if there's an error
-    
-    
+
     def count_and_find_non_empty_masks(self, folder):
         """
         Count non-empty masks in a folder using SimpleITK.
@@ -294,7 +307,7 @@ class DataAnalyzer(object):
             info["spacing"] = tuple(round(s, 3) for s in image.GetSpacing())
             # Try to get metadata fields if present
             keys = image.GetMetaDataKeys()
-            
+
             # for key in keys:
             #     print(image.GetMetaData(key))
 
@@ -397,11 +410,10 @@ class DataAnalyzer(object):
             max_workers=max_workers
         ) as executor:
             records = list(
-                executor.map(self.parse_metadata_file, 
-                self.file_paths_gen(parent_dir))
+                executor.map(self.parse_metadata_file, self.file_paths_gen(parent_dir))
             )
         return pd.DataFrame(records)
-    
+
     def image_intensity_histogram(self, image_path, bins=128, plot=False, save=None):
         """
         Compute the histogram of pixel intensities for a given image.
@@ -429,14 +441,16 @@ class DataAnalyzer(object):
         image_path = self.abspath(image_path)
         image = sitk.ReadImage(self.abspath(image_path))
         array = sitk.GetArrayFromImage(image).flatten()
-        hist, bin_edges = np.histogram(array, bins=bins, range=(array.min(), array.max()))
-        
+        hist, bin_edges = np.histogram(
+            array, bins=bins, range=(array.min(), array.max())
+        )
+
         if plot:
-            plt.figure(figsize=(6,4))
-            plt.bar(bin_edges[:-1], hist, width=np.diff(bin_edges), align='edge')
-            plt.xlabel('Pixel Intensity')
-            plt.ylabel('Frequency')
-            plt.title('Histogram of Pixel Intensities')
+            plt.figure(figsize=(6, 4))
+            plt.bar(bin_edges[:-1], hist, width=np.diff(bin_edges), align="edge")
+            plt.xlabel("Pixel Intensity")
+            plt.ylabel("Frequency")
+            plt.title("Histogram of Pixel Intensities")
             plt.grid()
             if save is not None:
                 if not save.endswith(".png"):
@@ -446,7 +460,7 @@ class DataAnalyzer(object):
 
         return hist, bin_edges
 
-    def pick_random(self, path,  num : int, type="file"):
+    def pick_random(self, path, num: int, type="file"):
         """
         Pick a random selection of files or directories from a given path.
 
@@ -464,7 +478,7 @@ class DataAnalyzer(object):
         list of str
             List of absolute paths to the randomly selected items.
         """
-        
+
         # if the folder has folders, pick a random one, and if not, then pick a random file
         path = self.abspath(path)
         if type == "file":
@@ -473,12 +487,15 @@ class DataAnalyzer(object):
             items = list(self.get_dirs(path))
         else:
             raise ValueError("type must be 'file' or 'dir'")
-        
+
         choices = np.random.choice(items, num, replace=False)
 
-        return [os.path.join(path, c) for c in choices]
-        
-    
+        return (
+            [os.path.join(path, c) for c in choices]
+            if num > 1
+            else os.path.join(path, choices[0])
+        )
+
 
 if __name__ == "__main__":
     from time import perf_counter
@@ -489,16 +506,18 @@ if __name__ == "__main__":
     analyzer = DataAnalyzer("/home/guest/work/Datasets")
 
     paths = {
-        "picai_labels_wg" : "picai_labels_all/picai_labels-main/anatomical_delineations/whole_gland/AI/Guerbet23",
-        "picai_labels_zonal" : "picai_labels_all/picai_labels-main/anatomical_delineations/zonal_pz_tz/AI/Yuan23",
-        "picai_folds" : "picai_folds/"
+        "picai_labels_wg": "picai_labels_all/picai_labels-main/anatomical_delineations/whole_gland/AI/Guerbet23",
+        "picai_labels_zonal": "picai_labels_all/picai_labels-main/anatomical_delineations/zonal_pz_tz/AI/Yuan23",
+        "picai_folds": "picai_folds/",
     }
 
     # use this regex to filter the files
-    analyzer.regex = "t2.nii.gz" #(.*_t2w.mha$)|(.*_sag.mha$)|(.*_cor.mha$)"
-    
+    analyzer.regex = "t2.nii.gz"  # (.*_t2w.mha$)|(.*_sag.mha$)|(.*_cor.mha$)"
+
     def test_histogram(analyzer):
-        analyzer.image_intensity_histogram("prostate158/prostate158_train/train/111/t2.nii.gz", plot=True)
+        analyzer.image_intensity_histogram(
+            "prostate158/prostate158_train/train/111/t2.nii.gz", plot=True
+        )
 
     def test_show_image(analyzer, paths):
 
@@ -512,21 +531,24 @@ if __name__ == "__main__":
         i1 = join(d, random_dir, name)
         # get the corresponding nii.gz file that masks the image
         nii = name.split("_t2w")[0] + ".nii.gz"
-        i2 = join(paths['picai_labels_zonal'], nii)
+        i2 = join(paths["picai_labels_zonal"], nii)
 
         analyzer.show_image(i1, i2, save="./test.png")
 
     def test_collect_metadata(analyzer):
         # Test collect_metadata_to_dataframe
         analyzer.regex = "t2.nii.gz"
-        res = analyzer.collect_metadata_to_dataframe("prostate158/prostate158_train/train/110")
+        res = analyzer.collect_metadata_to_dataframe(
+            "prostate158/prostate158_train/train/110"
+        )
         print(res)
 
         # Test collect_metadata_from_subdirs
         start = perf_counter()
         analyzer.regex = "(.*_t2w.mha$)|(.*_sag.mha$)|(.*_cor.mha$)"
-        df = analyzer.collect_metadata_from_subdirs("picai_folds/picai_images_fold0", 
-                                                    max_workers=analyzer.cpus)
+        df = analyzer.collect_metadata_from_subdirs(
+            "picai_folds/picai_images_fold0", max_workers=analyzer.cpus
+        )
         print(df)
         print(perf_counter() - start, "seconds")
 
