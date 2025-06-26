@@ -39,6 +39,7 @@ def n4_bias_field_correction(
     shrink_factor: int = 4,
     num_iterations: int = 50,
     num_fitting_levels: int = 4,
+    return_log_bias: bool = False,
 ) -> sitk.Image:
     """
     Applies N4 bias field correction to the whole image without using a mask.
@@ -48,9 +49,11 @@ def n4_bias_field_correction(
         shrink_factor: factor to reduce resolution (default 4).
         num_iterations: iterations per fitting level.
         num_fitting_levels: levels in the multi-scale hierarchy.
+        return_log_bias: if True, returns the logarithmic bias field as well. For visualization or debugging.
 
     Returns:
         Image with bias field correction applied.
+        If return_log_bias is True, also returns the logarithmic bias field.
     """
     # Ensure float type
     image = sitk.Cast(image, sitk.sitkFloat32)
@@ -79,7 +82,10 @@ def n4_bias_field_correction(
     # Copy spatial information
     corrected.CopyInformation(image)
 
-    return corrected, log_bias
+    if return_log_bias:
+        return corrected, log_bias
+    else:
+        return corrected
 
 
 def ensure_3d(image: sitk.Image) -> sitk.Image:
@@ -213,11 +219,14 @@ def describe_image(img: sitk.Image):
     """
     Print basic information about the image, such as size, spacing, origin and direction.
     """
-
+    print("__" * 30)
     print("Size (voxels):", img.GetSize())
     print("Spacing (mm):", tuple(round(s, 3) for s in img.GetSpacing()))
     print("Origin:", tuple(round(o, 3) for o in img.GetOrigin()))
     print("Direction:", tuple(round(d, 3) for d in img.GetDirection()))
+    print("__" * 30, end="\n\n")
+
+    return img # for pipeline compatibility
 
 
 # Example usage
