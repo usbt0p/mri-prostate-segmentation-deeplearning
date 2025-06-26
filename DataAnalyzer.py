@@ -14,16 +14,25 @@ import SimpleITK as sitk
 
 class DataAnalyzer(object):
     """
-    A class for analyzing medical imaging data.
+    A class for analyzing and manipulating directories containing medical
+    imaging data, such as MRI scans, and handling both 2D and 3D images.
+    These directories are usually structured in a way that each patient has a
+    separate folder containing their imaging data, but not in a standard way.
 
-    This class provides methods to read and analyze image files, extract metadata,
-    and visualize images. It is designed to work with directories containing medical
-    imaging data, such as MRI scans, and can handle both 2D and 3D images.
+    This class provides methods to:
+    - Get and yield directories and files, supporting regex filtering.
+    - Extract metadata from files, including dimensions, spacing, orientation, and vendor information.
+    - Visualize SimpleITK images from a given path or an Image object, save them and choose slices.
+    - Plot histograms of image intensities. 
+    - Find empty masks in a directory and count non-empty masks.
+    - Select random files or directories from a given path.
 
     .. warning::
         This heavily relies on setting absolute paths in each function to work properly.
         Every function except inner helpers (prefixed with an underscore) expects a path
         relative to the data root directory.
+        This is useful most of the time, but sometimes you might want to use absolute paths directly or 
+        wor around with os.path.join and other functions.
     """
 
     def __init__(self, data_root):
@@ -57,7 +66,11 @@ class DataAnalyzer(object):
         str
             Absolute path.
         """
-        return os.path.join(self.data_root, path)
+        try:
+            return os.path.join(self.data_root, path)
+        except TypeError as e:
+            print(f"Error joining path {self.data_root} with {path}: {e}")
+            sys.exit(1)
 
     def get_dirs(self, path):
         """
@@ -462,7 +475,7 @@ class DataAnalyzer(object):
 
     def pick_random(self, path, num: int, type="file"):
         """
-        Pick a random selection of files or directories from a given path.
+        Pick a random selection of files or directories from a given path and return their absolute paths (joined).
 
         Parameters
         ----------
