@@ -33,9 +33,8 @@ def n4_test():
 
     for i, folder in enumerate(rfolders, start=1):
 
-        img_path = data_analyzer.pick_random(folder, 1, type="file")[
-            0
-        ]  # unpack because it returns a list
+        img_path = data_analyzer.pick_random(folder, 1, type="file")
+  
         print(f"Processing image: {img_path}")
 
         img = sitk.ReadImage(img_path)
@@ -79,9 +78,7 @@ def normalization_test():
 
     for i, folder in enumerate(rfolders, start=1):
 
-        img_path = data_analyzer.pick_random(folder, 1, type="file")[
-            0
-        ]  # unpack because it returns a list
+        img_path = data_analyzer.pick_random(folder, 1, type="file")
         print(f"Processing image: {img_path}")
 
         img = sitk.ReadImage(img_path)
@@ -114,7 +111,7 @@ def test_resample_images(verbose=True):
 
     for i, folder in enumerate(rfolders, start=1):
 
-        img_path = data_analyzer.pick_random(folder, 1, type="file")[0]
+        img_path = data_analyzer.pick_random(folder, 1, type="file")
         print(f"Processing image: {img_path}")
 
         img = load_image(img_path)
@@ -137,7 +134,7 @@ def test_resample_mask(verbose=True):
 
     for i, folder in enumerate(rfolders, start=1):
 
-        img_path = data_analyzer.pick_random(folder, 1, type="file")[0]
+        img_path = data_analyzer.pick_random(folder, 1, type="file")
         print(f"Processing image: {img_path}")
 
         img = load_image(img_path)
