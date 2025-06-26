@@ -34,35 +34,6 @@ def normalize_image(image: sitk.Image, method: str = "zscore") -> sitk.Image:
 
     return norm_image
 
-def create_automatic_mask(image: sitk.Image) -> sitk.Image:
-    """
-    Create a mask using Gaussian blur, Otsu's thresholding, morphological operations,
-    and extracting the largest connected component.
-    """
-    # Apply Gaussian blur
-    blurred_image = sitk.SmoothingRecursiveGaussian(image, sigma=1.0)
-
-    # Otsu's thresholding
-    otsu_filter = sitk.OtsuThresholdImageFilter()
-    otsu_filter.SetInsideValue(0)
-    otsu_filter.SetOutsideValue(1)
-    binary_image = otsu_filter.Execute(blurred_image)
-
-    # Morphological closing
-    closed_image = sitk.BinaryMorphologicalClosing(binary_image, [10, 10, 10])
-
-    # Connected component analysis
-    connected_components = sitk.ConnectedComponent(closed_image)
-    labeled_image = sitk.RelabelComponent(connected_components, sortByObjectSize=True)
-
-    # Extract the largest connected component
-    largest_component = sitk.BinaryThreshold(
-        labeled_image, lowerThreshold=1, upperThreshold=1, insideValue=1, outsideValue=0
-    )
-
-    return sitk.Cast(largest_component, sitk.sitkUInt8)
-
-
 def n4_bias_field_correction(
     image: sitk.Image,
     shrink_factor: int = 4,
@@ -84,10 +55,7 @@ def n4_bias_field_correction(
     # Ensure float type
     image = sitk.Cast(image, sitk.sitkFloat32)
 
-    # Create mask if not supplied
-    # if mask is not None:
-    # TODO see if this is necessary
-    # mask = create_automatic_mask(image, threshold_method='otsu')
+    # Background masking might be needed here if no previous cropping has been done
 
     # Reduce resolution to speed up computation
     if shrink_factor > 1:
@@ -191,7 +159,6 @@ def get_region_of_interest(image: sitk.Image, crop: float) -> sitk.Image:
 
     return roi
 
-
 def resample_image(
     image: sitk.Image,
     out_spacing: tuple = (
@@ -236,9 +203,9 @@ def resample_image(
     resampled = resampler.Execute(image)
     return resampled
 
-
 def register_images():
     # TODO register the images to a common space, e.g., using mutual information
+    # in principle this is not needed for t2w images and their masks
     ...
 
 
@@ -256,29 +223,3 @@ def describe_image(img: sitk.Image):
 # Example usage
 if __name__ == "__main__":
     ...
-
-    # TODO figure out if different prepsocessing steps are order - invariant,
-    # or if they should be applied in a specific order.
-    #
-    # for example, if we apply n4 bias field correction, should we apply it before or after
-    # extracting the region of interest? after = less information to do the correction, but
-    # faster, before = more information, but slower.
-    # should alignignement / registration be done before or after the region of interest extraction?
-
-    # TODO how to check proper functioning of the methods? analyze the intensity distribution?
-
-    # TODO for n4 and normalize, some images might need background masking, but it
-    # seems top work like shit. any fixes?
-
-    # TODO determine the upscaling / downscaling process:
-    # order matters here, when to do it?
-
-    # TODO in resampling: must conserve the quality, i.e. not resample to a bigger
-    # voxel size or details will be lost!!
-    # do data exploration to find the voxel size counts and usee it to inform the new size
-
-    # TODO other stuff:
-    # 1. download the remaining datasets (script)
-    # 2. make some analysis of them
-    # 3. make a pipeline system / figure out if there is one that exists and lets you
-    # use custom functions

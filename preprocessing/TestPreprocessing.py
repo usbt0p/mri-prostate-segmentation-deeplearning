@@ -106,24 +106,6 @@ def normalization_test():
             output_path, plot=True, save=f"./imgs/histogram_processed_{i}.png"
         )
 
-def test_automatic_mask():  # TODO work in progress, make useful
-
-    # select a specific file that contains an obvious background
-    img_path = next(
-        data_analyzer.get_files(
-            "picai_folds/picai_images_fold0/11392", regex=".*_t2w.mha"  # 10947,
-        )
-    )
-
-    img_mask = create_automatic_mask(load_image(img_path))
-
-    # Save the mask
-    mask_path = "./imgs/automask.nii.gz"
-    sitk.WriteImage(img_mask, mask_path)
-
-    data_analyzer.data_root = "."
-    data_analyzer.show_image(img_path, mask_path, save="./imgs/automask.png")
-
 def test_resample_images(verbose=True):
     # use custom funtion to pick random directories
     rfolders = data_analyzer.pick_random(
@@ -189,12 +171,6 @@ def test_resample_mask(verbose=True):
 def resample_verbose_evaluation(img_original, img_resampled, i):
     # print info to evaluate the images
 
-    def describe_image(img):
-        print("Size (voxels):", img.GetSize())
-        print("Spacing (mm):", img.GetSpacing())
-        print("Origin:", img.GetOrigin())
-        print("Direction:", img.GetDirection())
-
     def absolute_difference(original_img, resampled_img):
         # this compares the original and resampled images voxel by voxel
         # useful to check the effect of interpolation in the resampling process,
@@ -243,7 +219,6 @@ if __name__ == "__main__":
     # Uncomment the function you want to test
     # roi_test()
     # n4_test()
-    test_automatic_mask()
     # test_resample_mask()
 
     # clean all .nii.gz files in the imgs folder after finished
