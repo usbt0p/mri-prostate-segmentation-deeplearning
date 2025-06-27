@@ -73,7 +73,7 @@ class Pipeline:
 if __name__ == "__main__":
 
     from preprocessing.PreProcessor import *
-    from DataAnalyzer import DataAnalyzer
+    from exploratoryAnalysis.DataAnalyzer import DataAnalyzer
     # TODO rename to preprocessors later
 
     analyzer = DataAnalyzer("/home/guest/work/Datasets")

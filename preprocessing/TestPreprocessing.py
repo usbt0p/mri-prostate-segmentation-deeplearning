@@ -203,7 +203,7 @@ def resample_verbose_evaluation(img_original, img_resampled, i):
 
 if __name__ == "__main__":
     import os
-    from DataAnalyzer import DataAnalyzer
+    from exploratoryAnalysis.DataAnalyzer import DataAnalyzer
 
     # we will pick several random images, apply preprocessing and save them in the ./imgs dir,
     # each with its corresponding index

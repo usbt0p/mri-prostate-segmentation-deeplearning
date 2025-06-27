@@ -36,12 +36,13 @@ do data exploration to find the voxel size counts and usee it to inform the new 
 - TODO other stuff:
 1. download the remaining datasets (script)
 2. make some analysis of them
-3. make a pipeline system / figure out if there is one that exists and lets you
 4. make a mask-joiner that creates whole gland masks from the two zonal ones
 use custom. 
-5. make a resizing function to cast all images to same size after cropping. See if it can be done in the resampling step.
+5. make a resizing function to cast all images to same size after cropping. See if it can be done in the resampling step. This might also be automatically performed by nnU-Net or other frameworks.
 6. ensure that the convetion in the masks is the same: pz is 1, tz is 2, and background is 0.
 7. abstract the path dictionary to the analyzer, or make a config file or data loader class...
+8. fix small regressions at the start of the notebooks
+9. explore the extents in 158
 
 ## Advancement logs
 
@@ -66,3 +67,4 @@ use custom.
 - Resampling has been implemented.
 - Simple image description for debugging has been implemented.
 - Visual inspection tests have been implemented for the available preprocessing steps. They show images before and after the preprocessing step, as well as some data like intensity distribution and shape.
+-  A pipeline system has been implemented to allow for easy chaining of preprocessing steps. 
