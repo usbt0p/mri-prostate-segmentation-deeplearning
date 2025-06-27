@@ -427,14 +427,14 @@ class DataAnalyzer(object):
             )
         return pd.DataFrame(records)
 
-    def image_intensity_histogram(self, image_path, bins=128, plot=False, save=None):
+    def image_intensity_histogram(self, image_or_path, bins=128, plot=False, save=None):
         """
         Compute the histogram of pixel intensities for a given image.
 
         Parameters
         ----------
-        image_path : str
-            Path to the image file (relative to data root).
+        image_or_path : str | SimpleITK.Image
+            Path to the image file (relative to data root), or sitk.Image.
         bins : int, optional
             Number of bins for the histogram. Default is 128.
         plot : bool, optional
@@ -451,8 +451,12 @@ class DataAnalyzer(object):
             - bin_edges : numpy.ndarray
                 The edges of the bins used in the histogram.
         """
-        image_path = self.abspath(image_path)
-        image = sitk.ReadImage(self.abspath(image_path))
+        if isinstance(image_or_path, sitk.Image):
+            image = image_or_path
+        else:
+            image_path = self.abspath(image_or_path)
+            image = sitk.ReadImage(image_path)
+
         array = sitk.GetArrayFromImage(image).flatten()
         hist, bin_edges = np.histogram(
             array, bins=bins, range=(array.min(), array.max())
