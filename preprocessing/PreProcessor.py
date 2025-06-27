@@ -216,8 +216,8 @@ def register_images():
 
 def combine_zonal_masks(
     zonal_mask: sitk.Image,
-    pz_value: int = 1,
-    tz_value: int = 2,
+    pz_value,
+    tz_value,
     background_value: int = 0,
 ) -> sitk.Image:
     """
@@ -246,6 +246,40 @@ def combine_zonal_masks(
     whole_gland_mask[zonal_mask == 0] = background_value  # Background
 
     return whole_gland_mask
+
+def swap_zonal_mask_values(
+    zonal_mask: sitk.Image,
+    pz_value: int,
+    tz_value: int,
+    background_value: int = 0,
+) -> sitk.Image:
+    """
+    Swap the values of the peripheral zone and transition zone in a zonal mask.
+    This is necessary in a multi dataset setting where the values might differ.
+    Use carefully and manually check labels, since wrong values can lead to incorrect results.
+
+    Parameters:
+        zonal_mask (sitk.Image): Input zonal mask image.
+        pz_value (int): Value for the peripheral zone.
+        tz_value (int): Value for the transition zone.
+        background_value (int): Value for the background.
+
+    Returns:
+        sitk.Image: Zonal mask with swapped values.
+    """
+    # Ensure the input is a 3D image
+    zonal_mask = ensure_3d(zonal_mask)
+
+    # Create a copy of the zonal mask to modify
+    swapped_mask = sitk.Image(zonal_mask.GetSize(), sitk.sitkUInt8)
+    swapped_mask.CopyInformation(zonal_mask)
+
+    # Swap values
+    swapped_mask[zonal_mask == pz_value] = tz_value
+    swapped_mask[zonal_mask == tz_value] = pz_value
+    swapped_mask[zonal_mask == 0] = background_value
+
+    return swapped_mask
     
 
 def describe_image(img: sitk.Image):

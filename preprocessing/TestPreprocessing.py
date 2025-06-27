@@ -208,22 +208,50 @@ def test_combine_zonal_masks():
 
     for i in range(nfiles):
         
-        # prostate158/prostate158_train/train
         zonal_mask_path = data_analyzer.pick_random(paths["picai_labels_zonal"], 1, type="file")
         print(f"Processing image: {zonal_mask_path}")
 
         zonal_mask = load_image(zonal_mask_path)
 
-        combined_mask = combine_zonal_masks(zonal_mask)
+        combined_mask = combine_zonal_masks(zonal_mask, 1, 2)
 
-        output_path = f"./imgs/combined_mask_{i}.nii.gz"
-        sitk.WriteImage(combined_mask, output_path)
+        da = DataAnalyzer(".")
+        da.show_image(
+            zonal_mask,
+            combined_mask,
+            save=f"./imgs/combined_mask_test_{i}.png",
+        )
+
+def test_swap_zonal_mask_values():
+    """
+    Test the swap_zonal_mask_values function.
+    This function swaps the values of the peripheral and transition zones in a zonal mask.
+    """
+
+    print("Testing swap_zonal_mask_values function...", end="\n\n")
+
+    # we try it in the prostate158 dataset since it has inverted labels to picai
+    data_analyzer.regex = "t2_anatomy_reader"
+    path = "prostate158/prostate158_train/train"
+
+    rfolders = data_analyzer.pick_random(
+        path, 3, type="dir"
+    )
+
+    for i, folder in enumerate(rfolders, start=1):
+
+        zonal_mask_path = data_analyzer.pick_random(folder, 1, type="file")
+        print(f"Processing image: {zonal_mask_path}")
+
+        zonal_mask = load_image(zonal_mask_path)
+
+        swapped_mask = swap_zonal_mask_values(zonal_mask, 1, 2)
 
         da = DataAnalyzer(".")
         da.show_image(
             zonal_mask_path,
-            output_path,
-            save=f"./imgs/combined_mask_test_{i}.png",
+            swapped_mask,
+            save=f"./imgs/swapped_mask_test_{i}.png",
         )
 
 
@@ -249,6 +277,7 @@ if __name__ == "__main__":
     # n4_test()
     # test_resample_mask()
     test_combine_zonal_masks()
+    #test_swap_zonal_mask_values()
 
     # clean all .nii.gz files in the imgs folder after finished
     for file in os.listdir("./imgs"):
