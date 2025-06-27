@@ -200,6 +200,32 @@ def resample_verbose_evaluation(img_original, img_resampled, i):
     absolute_difference(img_original, img_resampled)
     print("-" * 40)
 
+def test_combine_zonal_masks():
+    print("Testing combine_zonal_masks function...", end="\n\n")
+
+    data_analyzer.regex = ".*\.nii\.gz"
+    nfiles = 3
+
+    for i in range(nfiles):
+        
+        # prostate158/prostate158_train/train
+        zonal_mask_path = data_analyzer.pick_random(paths["picai_labels_zonal"], 1, type="file")
+        print(f"Processing image: {zonal_mask_path}")
+
+        zonal_mask = load_image(zonal_mask_path)
+
+        combined_mask = combine_zonal_masks(zonal_mask)
+
+        output_path = f"./imgs/combined_mask_{i}.nii.gz"
+        sitk.WriteImage(combined_mask, output_path)
+
+        da = DataAnalyzer(".")
+        da.show_image(
+            zonal_mask_path,
+            output_path,
+            save=f"./imgs/combined_mask_test_{i}.png",
+        )
+
 
 if __name__ == "__main__":
     import os
@@ -218,9 +244,11 @@ if __name__ == "__main__":
     }
 
     # Uncomment the function you want to test
+    # normalization_test()
     # roi_test()
     # n4_test()
     # test_resample_mask()
+    test_combine_zonal_masks()
 
     # clean all .nii.gz files in the imgs folder after finished
     for file in os.listdir("./imgs"):

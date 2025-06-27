@@ -214,6 +214,39 @@ def register_images():
     # in principle this is not needed for t2w images and their masks
     ...
 
+def combine_zonal_masks(
+    zonal_mask: sitk.Image,
+    pz_value: int = 1,
+    tz_value: int = 2,
+    background_value: int = 0,
+) -> sitk.Image:
+    """
+    Combine zonal mask values (pz and tz) into a whole gland mask.
+    Sets both zone annotations to 1, and the background to 0.
+
+    Parameters:
+        zonal_mask (sitk.Image): Input zonal mask image with two zones.
+        pz_value (int): Value for the peripheral zone in the output mask.
+        tz_value (int): Value for the transition zone in the output mask.
+        background_value (int): Value for the background in the output mask.
+
+    Returns:
+        sitk.Image: Combined whole gland mask.
+    """
+    # Ensure the input is a 3D image
+    zonal_mask = ensure_3d(zonal_mask)
+
+    # Create an output mask with the same size and spacing as the input
+    whole_gland_mask = sitk.Image(zonal_mask.GetSize(), sitk.sitkUInt8)
+    whole_gland_mask.CopyInformation(zonal_mask)
+
+    # Set the pixel values based on the zonal mask
+    whole_gland_mask[zonal_mask == pz_value] = 1  # Peripheral zone
+    whole_gland_mask[zonal_mask == tz_value] = 1  # Transition zone
+    whole_gland_mask[zonal_mask == 0] = background_value  # Background
+
+    return whole_gland_mask
+    
 
 def describe_image(img: sitk.Image):
     """

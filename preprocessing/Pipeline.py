@@ -98,7 +98,7 @@ if __name__ == "__main__":
             .add(resample_image) \
             .add(n4_bias_field_correction) \
             .add(describe_image)
-            #.add(normalize_image, method="minmax") \
+            #.add(normalize_image, method="minmax") \ # TODO this can be done in the training step
 
     processed_image = pipeline(img_pth)
 
