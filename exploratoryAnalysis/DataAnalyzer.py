@@ -512,6 +512,94 @@ class DataAnalyzer(object):
             if num > 1
             else os.path.join(path, choices[0])
         )
+    
+
+    def calculate_cube_bounds(self, mask_path):
+        """
+        Calculate the bounds of the smallest "cube" containing the mask, centered at the image center.
+
+        "Cube" is not strictly a cube but a rectangular prism that is centered around the image center
+        and extends equally in all directions in the x and y dimensions, while covering the full depth
+        of the mask in the z dimension.
+
+        With 'start_y', 'end_y', 'start_x', 'end_x', we calculate the 
+        size of the bounding box as the maximum of the width and height, 
+        and then calculate the proportion of that w.r.t. the image size, to 
+        get a sense of how much we can crop the image.
+
+        Parameters:
+            mask (numpy.ndarray): Path to a 3D mask (z, y, x).
+
+        Returns:
+            tuple: (start_z, end_z, start_y, end_y, start_x, end_x, mask_path, bounding_box_size, proportion_of_image_size)
+                representing the cube bounds and additional information about the bounding box size and its proportion of the image size.
+        """
+        mask_path = os.path.abspath(mask_path)  # ensure the path is absolute
+        # read
+        mask = sitk.ReadImage(mask_path)
+        mask = sitk.GetArrayFromImage(mask)
+
+        center_z, center_y, center_x = np.array(mask.shape) // 2
+
+        # Find non-zero regions in x and y dimensions
+        non_zero_indices = np.argwhere(mask)
+        min_y, max_y = non_zero_indices[:, 1].min(), non_zero_indices[:, 1].max()
+        min_x, max_x = non_zero_indices[:, 2].min(), non_zero_indices[:, 2].max()
+
+        # Calculate the farthest distance from the center in x and y directions
+        max_distance = max(center_y - min_y, max_y - center_y, center_x - min_x, max_x - center_x)
+
+        # Define the cube bounds
+        start_y = max(center_y - max_distance, 0)
+        end_y = min(center_y + max_distance + 1, mask.shape[1])
+        start_x = max(center_x - max_distance, 0)
+        end_x = min(center_x + max_distance + 1, mask.shape[2])
+
+        # Include the full depth (z-axis)
+        start_z = 0
+        end_z = mask.shape[0]
+
+        # we'll also calculate the bounding box size and its proportion of the image size
+        # for later analysis
+        width = end_x - start_x
+        height = end_y - start_y
+        bounding_box_size = max(width, height) # this shoulnt be needed since we are using a cube, but...
+        
+        image_size = max(mask.shape[1], mask.shape[2]  )
+        proportion_of_image_size = bounding_box_size / image_size
+
+        return (start_z, end_z, start_y, end_y, start_x, end_x, 
+            mask_path, bounding_box_size, proportion_of_image_size)
+
+    def overlay_bounding_box(self, mask, slice, start_y, end_y, start_x, end_x):
+        """
+        Overlay the mask as a bounding box in a slice.
+
+        Parameters:
+            mask (numpy.ndarray): The 3D mask.
+            start_y (int): Start index for the y-axis.
+            end_y (int): End index for the y-axis.
+            start_x (int): Start index for the x-axis.
+            end_x (int): End index for the x-axis.
+        """
+        # pick the slice from the mask
+        slice_data = mask[slice, :, :]
+
+        plt.figure(figsize=(6, 6))
+        plt.imshow(slice_data, cmap='gray')
+
+        # Draw the bounding box
+        plt.plot([start_x, end_x, end_x, start_x, start_x],
+                    [start_y, start_y, end_y, end_y, start_y],
+                    color='red', linewidth=2)
+
+        plt.title(f"Slice {slice} with Bounding Box")
+        plt.xlabel("X-axis")
+        plt.ylabel("Y-axis")
+        plt.axis('on')
+        plt.show()
+
+
 
 
 if __name__ == "__main__":

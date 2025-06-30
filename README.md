@@ -24,8 +24,6 @@ extracting the region of interest? after = less information to do the correction
 faster, before = more information, but slower.
 should alignignement / registration be done before or after the region of interest extraction?
 
-- TODO how to check proper functioning of the methods? analyze the intensity distribution?
-
 - TODO determine the upscaling / downscaling process:
 order matters here, when to do it?
 
@@ -34,17 +32,17 @@ voxel size or details will be lost!!
 do data exploration to find the voxel size counts and usee it to inform the new size
 
 - TODO other stuff:
+7. RE-STRUCTURE SHITTY DIRECTORY STRUCTURE IN DATASETS, MAKE CONSISTENT NAMING, STANDARDIZE ZONAL LABELS, REMOVE NON-T2W IMAGES
 6. ensure that the convetion in the masks is made the same: (pz is 1, tz is 2, and background is 0).
 5. make a resizing function to cast all images to same size after cropping. See if it can be done in the resampling step. This might also be automatically performed by nnU-Net or other frameworks.
 1. download the remaining datasets (script)
 2. make some analysis of them 
-7. abstract the path dictionary to the analyzer, or make a config file or data loader class...
 8. fix small regressions at the start of the notebooks
-9. explore the extents in 158
 
 ## Advancement logs
 
 ### Data exploration
+- A data exploration module and class has been created to provide a consistent interface for data exploration across different datasets.
 - Notebook for data exploration on PICAI dataset has been created. Data exploration includes:
     - Basic statistics of the dataset.
     - Visualization of the metadata distribution (vendor, mri type, orientation, etc.).
@@ -53,6 +51,7 @@ do data exploration to find the voxel size counts and usee it to inform the new 
     - Analysis of the distribution of image sizes (resolution).
     - Analysis of the intensity distribution of some images
     - Analysis of the approximate image center around which to set the ROI.
+    - Visualization of the centered bounding box around the prostate gland.
 - Notebook for data exploration on Prostate158 dataset, similar to the previous one, has been created.
 
 ### Preprocessing

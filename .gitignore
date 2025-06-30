@@ -5,6 +5,7 @@
 imgs/*
 # papermill output
 output.ipynb
+out*.ipynb
 
 ## Default stuff
 # Byte-compiled / optimized / DLL files
