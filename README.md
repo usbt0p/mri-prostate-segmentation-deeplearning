@@ -17,6 +17,8 @@ Notebooks with dataset exploration are provided, as well as modules for data ana
 
 ## TODO's
 
+### DOUBTS
+
 - TODO figure out if different prepsocessing steps are order - invariant,
 or if they should be applied in a specific order.
 for example, if we apply n4 bias field correction, should we apply it before or after
@@ -31,12 +33,14 @@ order matters here, when to do it?
 voxel size or details will be lost!!
 do data exploration to find the voxel size counts and usee it to inform the new size
 
-- TODO other stuff:
-7. RE-STRUCTURE SHITTY DIRECTORY STRUCTURE IN DATASETS, MAKE CONSISTENT NAMING, STANDARDIZE ZONAL LABELS, REMOVE NON-T2W IMAGES
-6. ensure that the convetion in the masks is made the same: (pz is 1, tz is 2, and background is 0).
-5. make a resizing function to cast all images to same size after cropping. See if it can be done in the resampling step. This might also be automatically performed by nnU-Net or other frameworks.
+### TODO (Ordered by priority) 
+1. analyze new datasets in disk, search info on web
+1. try loading a small dataset in monai
 1. download the remaining datasets (script)
 2. make some analysis of them 
+6. analyze masks for each dataset, ensure that the convetion in the masks is made the same: (pz is 1, tz is 2, and background is 0).
+5. cast all images to same size after cropping. See if it can be done in the resampling. This might also be automatically performed by nnU-Net or other frameworks.
+7. re-structure folders for nnUnet, remove unused files (non-mask or t2w)
 8. fix small regressions at the start of the notebooks
 
 ## Advancement logs

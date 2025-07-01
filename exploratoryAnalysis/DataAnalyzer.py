@@ -72,7 +72,7 @@ class DataAnalyzer(object):
             print(f"Error joining path {self.data_root} with {path}: {e}")
             sys.exit(1)
 
-    def get_dirs(self, path):
+    def get_dirs(self, path, regex=None, out : str='abs'):
         """
         Yield directory names in the specified path.
 
@@ -90,9 +90,21 @@ class DataAnalyzer(object):
         if not os.path.exists(path):
             print(f"Path {path} does not exist.")
             sys.exit(1)
+        
+        if regex: # TODO make it take the self.regex in a smart way
+            regex = compile(regex)
+        
         for d in os.listdir(path):
             if os.path.isdir(os.path.join(path, d)):
-                yield d
+                if regex:
+                    if regex.match(d):
+                        # TODO document and extendo to get files, write it better
+                        yield os.path.join(path, d) if out == 'abs' else \
+                            d if out == 'rel' else ValueError("out must be 'abs' or 'rel'")
+                else:
+                    yield os.path.join(path, d) if out == 'abs' else \
+                        d if out == 'rel' else ValueError("out must be 'abs' or 'rel'")
+
 
     def get_files(self, path, regex=None):
         """
