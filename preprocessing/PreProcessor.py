@@ -280,6 +280,18 @@ def swap_zonal_mask_values(
     swapped_mask[zonal_mask == 0] = background_value
 
     return swapped_mask
+
+def to_array(image: sitk.Image) -> np.ndarray:
+    """
+    Wrap SimpleITK's GetArrayFromImage to turn an image to a NumPy array.
+
+    Parameters:
+        image (sitk.Image): Input SimpleITK image.
+
+    Returns:
+        np.ndarray: Numpy array representation of the image.
+    """
+    return sitk.GetArrayFromImage(image)  # shape: [slices, height, width]
     
 
 def describe_image(img: sitk.Image):
