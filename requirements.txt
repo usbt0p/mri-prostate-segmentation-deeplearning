@@ -1,0 +1,11 @@
+monai
+# needed for reading nifti files with monai
+nibabel 
+
+simpleitk
+
+matplotlib
+numpy
+pandas
+
+ipywidgets
