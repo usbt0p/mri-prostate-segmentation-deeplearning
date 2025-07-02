@@ -1,4 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, List, Tuple, Any
+from os import cpu_count
 
 class Pipeline:
     """
@@ -12,6 +14,7 @@ class Pipeline:
         Initializes an empty pipeline with no processing steps.
         """
         self.steps = []
+        self.max_workers = cpu_count()
 
     def add(self, func: Callable, *args: Any, **kwargs: Any) -> "Pipeline":
         """
@@ -25,13 +28,12 @@ class Pipeline:
         Returns:
             Pipeline: The pipeline instance, allowing for method chaining.
         """
-
         self.steps.append((func, args, kwargs))
         return self
 
-    def run(self, image: Any) -> Any:
+    def _process_single(self, image: Any) -> Any:
         """
-        Executes the pipeline on the given image.
+        Processes a single image through the pipeline.
 
         Args:
             image (Any): The input image to process.
@@ -39,25 +41,46 @@ class Pipeline:
         Returns:
             Any: The processed image after applying all pipeline steps.
         """
-
-        # TODO decide if this is going to work with paths or images, or both
         for func, args, kwargs in self.steps:
             image = func(image, *args, **kwargs)
         return image
-    
-    def __call__(self, image: Any) -> Any:
+
+    def run(self, images: Any, parallel: bool = False, max_workers: int = 4) -> Any:
+        """
+        Executes the pipeline on the given image(s).
+
+        Args:
+            images (Any): The input image or list of images to process.
+            parallel (bool): Whether to process the images in parallel.
+            max_workers (int): The maximum number of workers for parallel processing.
+
+        Returns:
+            Any: The processed image(s) after applying all pipeline steps.
+        """
+        if isinstance(images, list):
+            if parallel:
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    results = list(executor.map(self._process_single, images))
+                return results
+            else:
+                return [self._process_single(image) for image in images]
+        else:
+            return self._process_single(images)
+
+    def __call__(self, images: Any, parallel: bool = True) -> Any:
         """
         Allows the pipeline to be called like a function.
 
         Args:
-            image (Any): The input image to process.
+            images (Any): The input image or list of images to process.
+            parallel (bool): Whether to process the images in parallel.
+            max_workers (int): The maximum number of workers for parallel processing.
 
         Returns:
-            Any: The processed image after applying all pipeline steps.
+            Any: The processed image(s) after applying all pipeline steps.
         """
+        return self.run(images, parallel=parallel, max_workers=self.max_workers)
 
-        return self.run(image)
-    
     def __repr__(self) -> str:
         """
         Returns a string representation of the pipeline steps.
