@@ -15,70 +15,18 @@ from exploratoryAnalysis.DataAnalyzer import DataAnalyzer
 import glob
 import os
 
-# # 1. scan your folders
-# DATA_ROOT = "/home/guest/work/Datasets"
-# paths = {
-#     "158_train" : "prostate158/prostate158_train/train",
-#     "158_test" : "prostate158/prostate158_test/test"
-# }
-# da = DataAnalyzer(DATA_ROOT)
 
-# da.regex = "t2.nii.gz" 
-# imgs = list(da.file_paths_gen(paths["158_test"]))
-
-# da.regex = "t2_anatomy_reader.*"
-# labs = list(da.file_paths_gen(paths["158_test"]))
-
-# data = [{"image": i, "label": l} for i,l in zip(imgs, labs)]
-# print("Number of training samples:", len(data))
-# for i in data[:10]:
-#     print(i)
-
-# # 2. minimal transforms
-# transf_for_loading = Compose([
-#     LoadImaged(keys=["image","label"]),
-#     EnsureChannelFirstd(keys=["image","label"]),
-#     ToTensord(keys=["image","label"]),
-# ])
-
-# # 3. dataset + loader
-# ds = Dataset(data, transform=transf_for_loading)
-# loader = DataLoader(ds, batch_size=1, num_workers=2, shuffle=True)
-
-# # 4. load & check once
-# batch = next(iter(loader))
-# print("Image tensor shape:", batch["image"].shape)
-# print("Label tensor shape:", batch["label"].shape)
-# #  visualize a middle slice
-# import matplotlib.pyplot as plt
-
-# def visualize_slice(image_tensor, slice_index):
-#     plt.imshow(image_tensor[0, 0, :, :, slice_index], cmap='gray')
-#     plt.axis('off')
-#     plt.title(f"Slice {slice_index}")
-#     plt.show()
-
-# # Visualize the middle slice of the first image in the batch
-# image_tensor = batch["label"]
-# middle_slice_index = image_tensor.shape[-1] // 2
-
-# visualize_slice(image_tensor, middle_slice_index)
-
-from monai.data import Dataset, DataLoader
-from monai.transforms import Compose, EnsureChannelFirstd, ToTensord, ToMetaTensord
 from preprocessing.Pipeline import Pipeline  # Assuming your Pipeline class is in pipeline.py
 from preprocessing.PreProcessor import *
 from exploratoryAnalysis.DataAnalyzer import DataAnalyzer
 from Utils import visualize_dicom_slider
+import SimpleITK as sitk
+import random
 
 # Initialize  pipeline
-pipeline = Pipeline()
-pipeline.add(load_image) \
-        .add(resample_image) \
-        .add(get_region_of_interest, crop=0.6) \
-        .add(n4_bias_field_correction) \
-        .add(to_array)
-
+crop_factor = 0.75 # according to data analysis for 158
+spacing = (0.5, 0.5, 0.5)  # Resampling factor for x, y, z dimensions
+        
 # Initialize DataAnalyzer
 analyzer = DataAnalyzer("/home/guest/work/Datasets")
 
@@ -87,62 +35,68 @@ paths = {
     "158_train": "prostate158/prostate158_train/train",
     "158_test": "prostate158/prostate158_test/test"
 }
+
 analyzer.regex = "t2.nii.gz"
 image_paths = list(analyzer.file_paths_gen(paths["158_test"]))
 
-analyzer.regex = "t2_anatomy_reader.*"
+# BEWARE!!!! there are two anatomy readers...
+analyzer.regex = "t2_anatomy_reader2.*"
 label_paths = list(analyzer.file_paths_gen(paths["158_test"]))
 
-# Preprocess images and labels using the pipeline
-data = []
-for img_path, lbl_path in zip(image_paths, label_paths):
-    processed_image = pipeline(img_path)  # Apply pipeline to image
-    processed_label = pipeline(lbl_path)  # Apply pipeline to label
-    # ensure the images (now ndarrays) have metadata and channel dims
-    processed_image = processed_image[None, ...]  # Add channel dimension
-    processed_label = processed_label[None, ...]  # Add channel dimension
+pipeline_images = Pipeline()
+pipeline_images.show_progress = True  # Enable progress bar for image processing
+pipeline_images.add(load_image) \
+        .add(resample_image, interpolator=sitk.sitkLinear, out_spacing=spacing) \
+        .add(get_region_of_interest, crop=crop_factor) \
+        .add(n4_bias_field_correction) \
 
-    print("Processed image shape:", processed_image.shape)
-    print("Processed label shape:", processed_label.shape)
-    data.append({"image": processed_image, "label": processed_label})
+pipeline_labels = Pipeline()
+pipeline_labels.show_progress = True  # Enable progress bar for label processing
+pipeline_labels.add(load_image) \
+        .add(resample_image, interpolator=sitk.sitkNearestNeighbor, out_spacing=spacing) \
+        .add(get_region_of_interest, crop=crop_factor) \
 
 
-# Define MONAI transforms
-transforms = Compose([
-    # ToMetaTensord(keys=["image", "label"]),  # Convert to metadata tensors
-    # EnsureChannelFirstd(keys=["image", "label"]),
-    ToTensord(keys=["image", "label"]),
-])
+# Preprocess images and labels using the pipeline, using parallel processing
+images_preprocessed = pipeline_images(image_paths)
+labels_preprocessed = pipeline_labels(label_paths)
+print(f"Processed {len(images_preprocessed)} images and {len(labels_preprocessed)} labels.")
 
-# Create MONAI Dataset and DataLoader
-monai_dataset = Dataset(data=data, transform=transforms)
-data_loader = DataLoader(monai_dataset, batch_size=1, num_workers=2, shuffle=True)
+out_root = "/media/guest/PORT-DISK/Datasets/"
 
-# 4. load & check once
-batch = next(iter(data_loader))
-print("Image tensor shape:", batch["image"].shape)
-print("Label tensor shape:", batch["label"].shape)
+output_paths = {
+    "images": os.path.join(out_root, "nnUNet_raw/Dataset001_prostate158/imagesTr"),
+    "labels": os.path.join(out_root, "nnUNet_raw/Dataset001_prostate158/labelsTr")
+}
 
-#  visualize a middle slice
-import matplotlib.pyplot as plt
+# Ensure output directories exist
+os.makedirs(output_paths["images"], exist_ok=True)
+os.makedirs(output_paths["labels"], exist_ok=True)
 
-def visualize_slice(image_tensor, slice_index):
-    plt.imshow(image_tensor[0, 0, slice_index, :, :], cmap='gray')
-    plt.axis('off')
-    plt.title(f"Slice {slice_index}")
-    plt.show()
+out_images = save_images(images_preprocessed, output_paths["images"], 
+            prefix="pros158_", ending=".nii.gz", channel_id="_0000")
 
-# Visualize the middle slice of the first image in the batch
+out_labels = save_images(labels_preprocessed, output_paths["labels"], 
+            prefix="pros158_", ending=".nii.gz", channel_id="")
 
-for i in range(5):
-    image_tensor, label_tensor = next(iter(data_loader)).values()
-    # turn metatensor in to a ndarray
-    image_tensor , label_tensor = image_tensor.numpy(), label_tensor.numpy()
-    print(type(image_tensor))
-    middle_slice_index = image_tensor.shape[2] // 2
-    #visualize_slice(image_tensor, middle_slice_index)
-    visualize_dicom_slider(image_tensor)
-    visualize_dicom_slider(label_tensor)
+# test loading 
+from exploratoryAnalysis.DataAnalyzer import DataAnalyzer
+
+da = DataAnalyzer(out_root)
+
+rand = random.choices(out_labels, k=10)  
+for i in rand:
+    #image, label = images_preprocessed[i], labels_preprocessed[i]
+    image = i
+    print(type(image))
+    if isinstance(image, sitk.Image):
+        print(image.GetSize(), image.GetSpacing())
+    visualize_dicom_slider(image)
+    #visualize_dicom_slider(label)
+
+# TODO make the json required by nnUNet
+# ensure no image id's are repeated due to different calls to save_images
+# TODO BEWARE some labels are being loaded empty, reason???
 
 
 
