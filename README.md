@@ -33,9 +33,11 @@ order matters here, when to do it?
 voxel size or details will be lost!!
 do data exploration to find the voxel size counts and usee it to inform the new size
 
-### TODO (Ordered by priority) 
-1. analyze new datasets in disk, search info on web
-1. try loading a small dataset in monai
+### TODO (Ordered by priority)
+- debug weird behavior in preprocessing (resampling?) 
+1. preprocess data and save it to structured folders (nnUnet Format)
+1. save preprocessed datasets to disk
+1. try loading a small dataset in monai (from disk)
 1. download the remaining datasets (script)
 2. make some analysis of them 
 6. analyze masks for each dataset, ensure that the convetion in the masks is made the same: (pz is 1, tz is 2, and background is 0).

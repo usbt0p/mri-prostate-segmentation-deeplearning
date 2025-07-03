@@ -1,5 +1,8 @@
 import numpy as np
 import SimpleITK as sitk
+from typing import Callable
+import os
+from concurrent.futures import ThreadPoolExecutor
 
 
 def normalize_image(image: sitk.Image, method: str = "zscore") -> sitk.Image:
@@ -292,7 +295,50 @@ def to_array(image: sitk.Image) -> np.ndarray:
         np.ndarray: Numpy array representation of the image.
     """
     return sitk.GetArrayFromImage(image)  # shape: [slices, height, width]
-    
+
+def save_image(index, img, output_dir, prefix, ending, channel_id):
+    """
+    Save a single SimpleITK image to a file.
+    The file format is based on nnUnet's requirements, with a specific naming convention.
+
+    Parameters:
+        index (int): Index of the image (used for naming).
+        img (sitk.Image): Image to save.
+        output_dir (str): Directory where the image will be saved.
+        prefix (str): Prefix for the saved image filename.
+        ending (str): File extension for the saved image.
+    """
+    filename = os.path.join(output_dir, f"{prefix}{index:03d}{channel_id}{ending}")
+    sitk.WriteImage(img, filename)
+    print(f"Saved image {index} to {filename}")
+
+    return filename  
+
+
+def save_images(images: list, output_dir: str, prefix: str, 
+                ending: str, channel_id: str) -> list:
+    """
+    Save multiple SimpleITK images to files in the specified directory in parallel.
+
+    Parameters:
+        images (list): List of SimpleITK images to save.
+        output_dir (str): Directory where images will be saved.
+        prefix (str): Prefix for the saved image filenames.
+        ending (str): File extension for the saved images.
+
+    Returns:
+        list: List of saved file paths.
+    """
+    with ThreadPoolExecutor() as executor:
+        filenames = list(
+            executor.map(
+                lambda args: save_image(*args, output_dir, prefix, ending, channel_id),
+                enumerate(images, start=1),
+            )
+        )
+    return filenames
+
+
 
 def describe_image(img: sitk.Image):
     """
@@ -306,6 +352,7 @@ def describe_image(img: sitk.Image):
     print("__" * 30, end="\n\n")
 
     return img # for pipeline compatibility
+
 
 
 # Example usage
