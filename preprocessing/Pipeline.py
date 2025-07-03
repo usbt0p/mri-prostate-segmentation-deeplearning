@@ -1,4 +1,4 @@
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, List, Tuple, Any
 from os import cpu_count
 from tqdm import tqdm
@@ -50,6 +50,8 @@ class Pipeline:
     def run(self, images: Any, parallel: bool = False, max_workers: int = 4) -> Any:
         """
         Executes the pipeline on the given image(s).
+        This method can process a single image or a list of images, either in
+        parallel or sequentially, depending on the `parallel` argument.
 
         Args:
             images (Any): The input image or list of images to process.
@@ -61,13 +63,23 @@ class Pipeline:
         """
         if isinstance(images, list):
             if parallel:
-                with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    if self.show_progress:
-                        results = list(tqdm(executor.map(self._process_single, images), 
-                                            total=len(images), desc="Processing"))
-                    else:
-                        results = list(executor.map(self._process_single, images))
-                return results
+
+                if self.show_progress:
+                    # basically a progress bar for the parallel processing,
+                    # but we need to update the progress bar as each image is processed
+                    # or else tqdm will show sereval progress bars as the threads finish
+                    with tqdm(total=len(images), desc="Preprocessing") as pbar:
+                        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                            futures = {executor.submit(self._process_single, image): image for image in images}
+                            results = []
+                            for future in as_completed(futures):
+                                results.append(future.result())
+                                pbar.update(1)
+                    return results
+                
+                else:
+                    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        return list(executor.map(self._process_single, images))
             else:
                 if self.show_progress:
                     images = tqdm(images, desc="Processing", total=len(images))
@@ -100,7 +112,7 @@ class Pipeline:
             f"{i+1}. {func.__name__}({', '.join(map(str, args))}, {', '.join(f'{k}={v}' for k, v in kwargs.items())})"
             for i, (func, args, kwargs) in enumerate(self.steps)
         )
-    
+
 if __name__ == "__main__":
 
     from preprocessing.PreProcessor import *
