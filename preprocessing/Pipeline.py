@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, List, Tuple, Any
 from os import cpu_count
+from tqdm import tqdm
 
 class Pipeline:
     """
@@ -15,6 +16,7 @@ class Pipeline:
         """
         self.steps = []
         self.max_workers = cpu_count()
+        self.show_progress = False
 
     def add(self, func: Callable, *args: Any, **kwargs: Any) -> "Pipeline":
         """
@@ -60,9 +62,15 @@ class Pipeline:
         if isinstance(images, list):
             if parallel:
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    results = list(executor.map(self._process_single, images))
+                    if self.show_progress:
+                        results = list(tqdm(executor.map(self._process_single, images), 
+                                            total=len(images), desc="Processing"))
+                    else:
+                        results = list(executor.map(self._process_single, images))
                 return results
             else:
+                if self.show_progress:
+                    images = tqdm(images, desc="Processing", total=len(images))
                 return [self._process_single(image) for image in images]
         else:
             return self._process_single(images)
