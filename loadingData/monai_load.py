@@ -94,9 +94,6 @@ for i in rand:
     visualize_dicom_slider(image)
     #visualize_dicom_slider(label)
 
-# TODO make the json required by nnUNet
-# ensure no image id's are repeated due to different calls to save_images
-# TODO BEWARE some labels are being loaded empty, reason???
 
 
 
