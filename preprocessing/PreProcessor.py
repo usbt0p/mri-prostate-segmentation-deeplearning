@@ -252,9 +252,6 @@ def combine_zonal_masks(
 
 def swap_zonal_mask_values(
     zonal_mask: sitk.Image,
-    pz_value: int,
-    tz_value: int,
-    background_value: int = 0,
 ) -> sitk.Image:
     """
     Swap the values of the peripheral zone and transition zone in a zonal mask.
@@ -263,9 +260,6 @@ def swap_zonal_mask_values(
 
     Parameters:
         zonal_mask (sitk.Image): Input zonal mask image.
-        pz_value (int): Value for the peripheral zone.
-        tz_value (int): Value for the transition zone.
-        background_value (int): Value for the background.
 
     Returns:
         sitk.Image: Zonal mask with swapped values.
@@ -277,10 +271,10 @@ def swap_zonal_mask_values(
     swapped_mask = sitk.Image(zonal_mask.GetSize(), sitk.sitkUInt8)
     swapped_mask.CopyInformation(zonal_mask)
 
-    # Swap values
-    swapped_mask[zonal_mask == pz_value] = tz_value
-    swapped_mask[zonal_mask == tz_value] = pz_value
-    swapped_mask[zonal_mask == 0] = background_value
+    # Swap values, label agnotic!!
+    swapped_mask[zonal_mask == 1] = 2  
+    swapped_mask[zonal_mask == 2] = 1  
+    swapped_mask[zonal_mask == 0] = 0 
 
     return swapped_mask
 
@@ -296,6 +290,9 @@ def to_array(image: sitk.Image) -> np.ndarray:
     """
     return sitk.GetArrayFromImage(image)  # shape: [slices, height, width]
 
+def create_filename(output_dir: str, index: int, prefix: str, ending: str, channel_id: str) -> str:
+    return os.path.join(output_dir, f"{prefix}{index:04d}{channel_id}{ending}")
+
 def save_image(index, img, output_dir, prefix, ending, channel_id):
     """
     Save a single SimpleITK image to a file.
@@ -308,32 +305,30 @@ def save_image(index, img, output_dir, prefix, ending, channel_id):
         prefix (str): Prefix for the saved image filename.
         ending (str): File extension for the saved image.
     """
-    filename = os.path.join(output_dir, f"{prefix}{index:03d}{channel_id}{ending}")
+    filename = create_filename(output_dir, index, prefix, ending, channel_id)
     sitk.WriteImage(img, filename)
     print(f"Saved image {index} to {filename}")
 
     return filename  
 
 
-def save_images(images: list, output_dir: str, prefix: str, 
-                ending: str, channel_id: str) -> list:
+def save_images(images: list, out_paths : list, workers=8) -> list:
     """
     Save multiple SimpleITK images to files in the specified directory in parallel.
 
     Parameters:
         images (list): List of SimpleITK images to save.
-        output_dir (str): Directory where images will be saved.
-        prefix (str): Prefix for the saved image filenames.
-        ending (str): File extension for the saved images.
+        out_paths (list): List of output file paths where the images will be saved.
 
     Returns:
         list: List of saved file paths.
     """
-    with ThreadPoolExecutor() as executor:
+    with ThreadPoolExecutor(max_workers=workers) as executor:
         filenames = list(
             executor.map(
-                lambda args: save_image(*args, output_dir, prefix, ending, channel_id),
-                enumerate(images, start=1),
+                sitk.WriteImage,
+                images,
+                out_paths
             )
         )
     return filenames
