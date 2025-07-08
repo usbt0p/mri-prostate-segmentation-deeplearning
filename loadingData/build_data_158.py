@@ -1,6 +1,7 @@
 from exploratoryAnalysis.DataAnalyzer import DataAnalyzer
 from preprocessing.PreProcessor import *
 from preprocessing.Pipeline import Pipeline
+from Utils import *
 
 from time import perf_counter
 import json
@@ -10,12 +11,12 @@ import os
 RAW_DATA_ROOT = "/home/guest/work/Datasets"
 
 # these paths are used to save the preprocessed data following nnUNet's conventions
-OUT_ROOT = "/media/guest/PORT-DISK/Datasets/nnUNet_raw/"
+OUT_ROOT = "/media/guest/Datasets/nnUNet_raw/"
 DATASET_NAME = "Dataset001_prostate158"
 
 # Format for images: {CASE_IDENTIFIER(includes an id)}_{XXXX}.{FILE_ENDING}
 # Format for labels: {CASE_IDENTIFIER(includes an id)}.{FILE_ENDING}
-PREFIX_NAME = "pros158_" # ... + case_id + ...
+PREFIX_NAME = "pros158_"  # ... + case_id + ...
 FILE_ENDING = ".nii.gz"
 
 # this path points to the root of the specific dataset train and test (or to only one if they are mixed)
@@ -33,7 +34,7 @@ output_paths = {
 spacing = (0.5, 0.5, 3.0)  # Resampling factor for x, y, z dimensions
 crop_factor = 0.75  # according to data analysis for 158
 # if True, swaps the values of the zonal masks (PZ=1, TZ=2) to (PZ=2, TZ=1) or vice versa
-bool_swap_mask_values = True  
+bool_swap_mask_values = True
 
 ########################  INPUT PART  ###########################
 
@@ -72,10 +73,10 @@ out_images = [
 
 out_labels = [
     create_filename(
-        output_paths["labels"], 
-        idx, 
-        prefix=PREFIX_NAME, 
-        ending=FILE_ENDING, 
+        output_paths["labels"],
+        idx,
+        prefix=PREFIX_NAME,
+        ending=FILE_ENDING,
         channel_id="",
     )
     for idx in range(len(label_paths))
@@ -114,7 +115,7 @@ print(f"Preprocessing JSON saved to {json_file}")
 with open("./loadingData/data.template.json", "r") as f:
     data_json = json.load(f)
 data_json["numTraining"] = len(images_json)
-data_json["file_endings"] = FILE_ENDING
+data_json["file_ending"] = FILE_ENDING
 
 # Save the data JSON to a file
 data_json_file = os.path.join(json_path, "dataset.json")
@@ -133,42 +134,46 @@ del images_json, labels_json, data_json, preprocessing_json  # free some memory
 # Initialize pipelines with the desired preprocessing steps
 
 pipeline_images = Pipeline()
-pipeline_images.show_progress = True  # Enable progress bar for image processing
-pipeline_images.add(load_image) \
-        .add(resample_image, interpolator=sitk.sitkLinear, out_spacing=spacing) \
-        .add(get_region_of_interest, crop=crop_factor) \
-        .add(n4_bias_field_correction) \
+pipeline_images.add(load_image).add(
+    resample_image, interpolator=sitk.sitkLinear, out_spacing=spacing
+    ).add(get_region_of_interest, crop=crop_factor
+    ).add(n4_bias_field_correction)
 
 pipeline_labels = Pipeline()
-pipeline_labels.show_progress = True  # Enable progress bar for label processing
-pipeline_labels.add(load_image) \
-        .add(resample_image, interpolator=sitk.sitkNearestNeighbor, out_spacing=spacing) \
-        .add(get_region_of_interest, crop=crop_factor)
+pipeline_labels.add(load_image
+    ).add(resample_image, interpolator=sitk.sitkNearestNeighbor, out_spacing=spacing
+    ).add(get_region_of_interest, crop=crop_factor)
 
 if bool_swap_mask_values:
     pipeline_labels.add(swap_zonal_mask_values)
 
 # Preprocess images and labels using the pipeline
 # by default it is using parallel processing
+
+# zip images and labels to keep them associated
+img_lbl_pairs = list(zip(image_paths, label_paths))
+workers = os.cpu_count()  # Use all available CPU cores
+
+# And, now, Process and save pairs in parallel
 start_time = perf_counter()
-images_preprocessed : list[sitk.Image] = pipeline_images(image_paths)
-print(f"Processed {len(images_preprocessed)} images.")
-labels_preprocessed : list[sitk.Image] = pipeline_labels(label_paths)
-print(f"Processed {len(labels_preprocessed)} labels.")
+# results are tuples of (image_path, label_path)
+paired_results = preprocess_pairs_parallel(
+    img_lbl_pairs, pipeline_images, pipeline_labels, workers=workers
+)
 
 # Ensure output directories exist
 os.makedirs(output_paths["images"], exist_ok=True)
 os.makedirs(output_paths["labels"], exist_ok=True)
 
 # save the images and labels to disk, also in parallel
-cores = os.cpu_count()
-out_images = save_images(images_preprocessed, out_images, workers= cores) # returns the paths
-out_labels = save_images(labels_preprocessed, out_labels, workers=cores)
+# same as before with the parallel pairs, keeping association
+out_i, out_l = save_pairs_parallel(
+    paired_results, out_images, out_labels, workers=workers
+)
 
 # count the saving as part of the preprocessing time
 end_time = perf_counter()
-
-print(f"Saved {len(out_images)} images and {len(out_labels)} labels to disk.")
+print(f"Saved {len(out_i)} images and {len(out_l)} labels to disk.")
 
 # Save metadata about the pipeline to preprocessing.json
 with open(json_file, "r") as f:
@@ -183,18 +188,5 @@ with open(json_file, "w") as f:
     json.dump(dataset_json, f, indent=4)
 print(f"Updated dataset JSON saved to {json_file}")
 
-# TODO BEWARE some labels are being loaded empty, reason???
-
-####### Optional, legacy from previous test, visualize some random images ########
-# import random
-# from Utils import *
-
-# rand = random.choices(out_labels, k=10)  
-# for i in rand:
-#     #image, label = images_preprocessed[i], labels_preprocessed[i]
-#     image = i
-#     print(type(image))
-#     if isinstance(image, sitk.Image):
-#         print(image.GetSize(), image.GetSpacing())
-#     visualize_dicom_slider(image)
-#     #visualize_dicom_slider(label)
+# visual check of some of the images and labels
+show_random_from_json(json_file)

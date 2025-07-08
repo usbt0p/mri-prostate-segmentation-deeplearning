@@ -16,7 +16,7 @@ class Pipeline:
         """
         self.steps = []
         self.max_workers = cpu_count()
-        self.show_progress = False
+        self.show_progress = True
 
     def add(self, func: Callable, *args: Any, **kwargs: Any) -> "Pipeline":
         """

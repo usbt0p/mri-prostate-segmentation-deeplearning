@@ -2,7 +2,9 @@ import numpy as np
 import SimpleITK as sitk
 from typing import Callable
 import os
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
+import json
 
 
 def normalize_image(image: sitk.Image, method: str = "zscore") -> sitk.Image:
@@ -162,7 +164,8 @@ def get_region_of_interest(image: sitk.Image, crop: float) -> sitk.Image:
 
     new_size = [int(dim * crop) for dim in original_size]
 
-    # Compute the start index for cropping
+    # Compute the start index for cropping, keep the original depth (z) 
+    new_size[2] = original_size[2]  # keep the original depth
     start = [max(0, c - ns // 2) for c, ns in zip(center, new_size)]
     roi = sitk.RegionOfInterest(image, size=new_size, index=start)
 
@@ -215,6 +218,7 @@ def resample_image(
 def register_images():
     # TODO register the images to a common space, e.g., using mutual information
     # in principle this is not needed for t2w images and their masks
+    print("Image registration is not implemented yet.")
     ...
 
 def combine_zonal_masks(
@@ -293,23 +297,16 @@ def to_array(image: sitk.Image) -> np.ndarray:
 def create_filename(output_dir: str, index: int, prefix: str, ending: str, channel_id: str) -> str:
     return os.path.join(output_dir, f"{prefix}{index:04d}{channel_id}{ending}")
 
-def save_image(index, img, output_dir, prefix, ending, channel_id):
+def save_image(image, out_path):
     """
-    Save a single SimpleITK image to a file.
-    The file format is based on nnUnet's requirements, with a specific naming convention.
+    Wrapper around SimpleITK image writer.
 
     Parameters:
-        index (int): Index of the image (used for naming).
         img (sitk.Image): Image to save.
-        output_dir (str): Directory where the image will be saved.
-        prefix (str): Prefix for the saved image filename.
-        ending (str): File extension for the saved image.
+        out_path (str): Path where the image will be saved.
     """
-    filename = create_filename(output_dir, index, prefix, ending, channel_id)
-    sitk.WriteImage(img, filename)
-    print(f"Saved image {index} to {filename}")
-
-    return filename  
+    sitk.WriteImage(image, out_path)
+    return out_path  
 
 
 def save_images(images: list, out_paths : list, workers=8) -> list:
@@ -333,7 +330,68 @@ def save_images(images: list, out_paths : list, workers=8) -> list:
         )
     return filenames
 
+def save_pair(image_label_pair, out_images, out_labels):
+    """
+    Saves a preprocessed image-label pair to disk.
+    Args:
+        pair (tuple): A tuple containing the preprocessed image and label.
+    Returns:
+        tuple: A tuple containing the paths of the saved image and label.
+    """
+    preprocessed_image, preprocessed_label = image_label_pair
+    # save the image and label to disk
+    image_path = save_image(preprocessed_image, out_images)
+    label_path = save_image(preprocessed_label, out_labels)
+    return image_path, label_path
 
+def save_pairs_parallel(image_label_pairs: list[tuple],
+    out_images: list[str],
+    out_labels: list[str],
+    workers=8
+    ) -> list[tuple]:
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(save_pair, pair, out_img, out_lbl): pair for 
+                pair, out_img, out_lbl in zip(image_label_pairs, out_images, out_labels)}
+        out_i = []
+        out_l = []
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Saving pairs"):
+            image_path, label_path = future.result()
+            out_i.append(image_path)
+            out_l.append(label_path)
+    return out_i, out_l
+
+
+def preprocess_pair(pair, pipeline_images: Callable, pipeline_labels: Callable):
+    """
+    Preprocesses a single image-label pair.
+    The pair MUST be in order (image label).
+
+    Args:
+        pair (tuple): A tuple containing the image path and label path.
+    Returns:
+        tuple: A tuple containing the preprocessed image and label.
+    """
+    image_path, label_path = pair
+    # since we are calling with single path, not a list, the pipeline will not parallelize
+    # giving us the opportunity to do so in this pairwise manner
+    preprocessed_image = pipeline_images(image_path)
+    preprocessed_label = pipeline_labels(label_path)
+    return preprocessed_image, preprocessed_label
+
+def preprocess_pairs_parallel(img_lbl_pairs: list[tuple], 
+    pipeline_images: Callable, 
+    pipeline_labels: Callable, 
+    workers=8
+    ):
+    results = []
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(preprocess_pair, pair, pipeline_images, pipeline_labels
+                                ): pair for pair in img_lbl_pairs}
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Processing pairs"):
+            results.append(future.result()) # results are tuples of (image_path, label_path)
+    
+    return results
 
 def describe_image(img: sitk.Image):
     """
