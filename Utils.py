@@ -11,6 +11,7 @@ import os
 import SimpleITK as sitk
 import random
 import json
+from tqdm import tqdm
 
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
@@ -152,21 +153,51 @@ def test_label_image_correspondence(zipped):
     # load them with SimpleITK and check that their dimsensions and spacing match
     # we do this to ensure that the labels and images are compatible and the preprocessing will not fail
 
-    for label, image in zipped:
+    zipped = list(zipped)  # Convert to list to iterate multiple times if needed
+    for label_x, image_x in tqdm(zipped, total=len(zipped), desc="Checking label-image correspondence"):
 
-        if isinstance(label, str):
-            label = sitk.ReadImage(label)
-            image = sitk.ReadImage(image)
+        if isinstance(label_x, str):
+            label = sitk.ReadImage(label_x)
+            image = sitk.ReadImage(image_x)
+        else:
+            label = label_x
+            image = image_x
 
         # Check if the dimensions match
         if label.GetSize() != image.GetSize():
-            raise ValueError(f"Size mismatch: {label.GetSize()} and {image.GetSize()}")
+            raise ValueError(f"Size mismatch: {label.GetSize()} and {image.GetSize()}\
+                            for label\n{label_x}\nand image\n{image_x}")
 
-        # Check if the spacing matches
-        if label.GetSpacing() != image.GetSpacing():
-            raise ValueError(f"Spacing mismatch: {label.GetSpacing()} and {image.GetSpacing()}")
+        # Check if the spacing matches (rounding to 4 digits)
+        lround = tuple(round(x, 4) for x in label.GetSpacing())
+        iround = tuple(round(x, 4) for x in image.GetSpacing())
+        if lround != iround:
+            raise ValueError(f"Spacing mismatch: {label.GetSpacing()} and {image.GetSpacing()}\
+                            for label\n{label_x}\nand image\n{image_x}")
 
+def modify_preprocessing_json(preprocessing: str):
+    
+    with open(preprocessing, "r") as f:
+        dataset_json = json.load(f)
 
+    # for every value in the dataset_json["imagesTr"] and dataset_json["labelsTr"]
+    # change the basename to be picai_0000... instead of picai0000...
+    # and save the json again
+    for key in dataset_json["imagesTr"].keys():
+        new_value = dataset_json["imagesTr"][key].replace("Dataset002_picai_", "Dataset002_picai")
+        dataset_json["imagesTr"][key] = new_value
+
+    for key in dataset_json["labelsTr"].keys():
+        new_value = dataset_json["labelsTr"][key].replace("Dataset002_picai_", "Dataset002_picai")
+        dataset_json["labelsTr"][key] = new_value
+
+    print("first image in imagesTr:", list(dataset_json["imagesTr"].items())[0:2])
+    print("first image in labelsTr:", list(dataset_json["labelsTr"].items())[0:2])
+
+    # Save the updated JSON to a file
+    with open(preprocessing, "w") as f:
+        json.dump(dataset_json, f, indent=4)
+    print(f"Updated preprocessing JSON saved to {preprocessing}")
 
 
 if __name__ == "__main__":
