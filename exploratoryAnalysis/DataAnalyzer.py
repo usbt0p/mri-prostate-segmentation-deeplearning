@@ -169,19 +169,19 @@ class DataAnalyzer(object):
                 axes = [axes]
 
             for ax, image_path in zip(axes, image_or_path):
-
-                if not isinstance(image_path, sitk.Image):
+                               
+                if isinstance(image_path, str):
                     image_path = self.abspath(image_path)
-
                     # Load the image using SimpleITK
                     image = sitk.ReadImage(image_path)
+                    image_array = sitk.GetArrayViewFromImage(image)
                     title = title if title else os.path.basename(image_path)
-                else:
+                elif isinstance(image_path, sitk.Image):
                     image = image_path
+                    image_array = sitk.GetArrayViewFromImage(image)
                     title = title if title else "Image"  # TODO this is shitty
-
-                # Convert the image to a numpy array for visualization
-                image_array = sitk.GetArrayViewFromImage(image)
+                else:
+                    image_array = image_path              
 
                 
                 if image_array.ndim == 3: # if the image is 3D
@@ -468,8 +468,11 @@ class DataAnalyzer(object):
         else:
             image_path = self.abspath(image_or_path)
             image = sitk.ReadImage(image_path)
-
+        
         array = sitk.GetArrayFromImage(image).flatten()
+        if array.ndim == 4: # if the image is 4D, we need to flatten it
+            array = array[0, ...]
+
         hist, bin_edges = np.histogram(
             array, bins=bins, range=(array.min(), array.max())
         )
