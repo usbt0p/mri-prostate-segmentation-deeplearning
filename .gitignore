@@ -1,6 +1,7 @@
 
 ## specifics
 *.png
+*.log
 *.nii.gz
 imgs/*
 # papermill output

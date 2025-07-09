@@ -73,21 +73,22 @@ do data exploration to find the voxel size counts and usee it to inform the new 
 - Simple image description for debugging has been implemented (e.g. image shape, voxel size, etc.).
 - Visual inspection tests have been implemented for the available preprocessing steps. They show images before and after the preprocessing step, as well as some data like intensity distribution and shape. These tests are not meant to be exhaustive, but rather to provide a quick visual check of the preprocessing steps.
 -  A pipeline system has been implemented to allow for easy chaining of preprocessing steps. 
+- Methods have been implemented to preprocess the images and labels in pairs, in parallel, and to save them also in parallel, ensuring that the images always match their labels.
 
 
 ## Data wrangling
 
-``` json
-// this is nnUnet's expected metadata json
+``` python
+# this is nnUnet's expected metadata json
 {
-    "channel_names": {"0": "T2"},  // we have only one channel, so we use "0" as the key
-    "labels": {  // IMPORTANT this is our label mapping
+    "channel_names": {"0": "T2"},  # we have only one channel, so we use "0" as the key
+    "labels": {  # IMPORTANT this is our label mapping
         "background": 0,
-        "TZ": 1, // use convention from PI-CAI (it provides the most images)
+        "TZ": 1, # use convention from PI-CAI (it provides the most images)
         "PZ": 2,
     },
-    "numTraining": len(image_paths),  // number of training images
+    "numTraining": len(image_paths),  # number of training images
     "file_ending": FILE_ENDING
-    // "overwrite_image_reader_writer": "SimpleITKIO",  // optional! If not provided nnU-Net will automatically determine the ReaderWriter
+    # "overwrite_image_reader_writer": "SimpleITKIO",  # optional! If not provided nnU-Net will automatically determine the ReaderWriter
 }
 ```
