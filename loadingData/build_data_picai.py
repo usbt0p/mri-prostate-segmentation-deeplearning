@@ -1,7 +1,7 @@
 from exploratoryAnalysis.DataAnalyzer import DataAnalyzer
 from preprocessing.PreProcessor import *
 from preprocessing.Pipeline import Pipeline
-from Utils import *
+from preprocessing.Utils import *
 
 from time import perf_counter
 import json
