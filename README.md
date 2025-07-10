@@ -33,6 +33,10 @@ order matters here, when to do it?
 voxel size or details will be lost!!
 do data exploration to find the voxel size counts and usee it to inform the new size
 
+- I've used a different cropping percentage for each of the datasets, but in testing, i must determine
+ a single percentage that works for all datasets. average? will setting the most restrictive percentage
+ worsen the results for some datasets? cropping too much surely will, but maybe cropping too little too since the data will be all in a similar scale
+
 ### TODO (Ordered by priority)
 - debug weird behavior in preprocessing (resampling?) 
 1. preprocess data and save it to structured folders (nnUnet Format)

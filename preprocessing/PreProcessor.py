@@ -107,21 +107,21 @@ def ensure_3d(image: sitk.Image) -> sitk.Image:
         sitk.Image: 3D image.
     """
     dim = image.GetDimension()
-
+    extracted = None
     if dim == 3:
         return image
 
     elif dim == 4:
         size = list(image.GetSize())
+        # TODO check if this if is necessary or we can just do image[..., 0] for all 4d
         if size[3] != 1:
-            raise ValueError(
-                f"The image has {size[3]} volumes in the 4th dimension. Expected only one."
-            )
-
-        # Extract the 3D volume (index 0 in the 4th dimension)
-        extract_size = size[:3] + [0]  # remove the 4th dimension
-        extract_index = [0, 0, 0, 0]
-        extracted = sitk.Extract(image, size=extract_size, index=extract_index)
+            # remove the 4th dimension if it has more than one volume
+            extracted = image[...,0]
+        else: 
+            # Extract the 3D volume (index 0 in the 4th dimension)
+            extract_size = size[:3] + [0]  # remove the 4th dimension
+            extract_index = [0, 0, 0, 0]
+            extracted = sitk.Extract(image, size=extract_size, index=extract_index)
         return extracted
 
     else:
@@ -176,13 +176,13 @@ def resample_image(
     out_spacing: tuple = (
         0.5,
         0.5,
-        0.5,
+        3.0,
     ),  # TODO choose the best based on data exploration
     interpolator=sitk.sitkLinear,
     default_value: float = 0.0,
 ) -> sitk.Image:
     """
-    Resample the image to a given isotropic voxel size.
+    Resample the image to a given voxel size.
 
     Parameters:
         image (sitk.Image): Input image.
@@ -215,11 +215,17 @@ def resample_image(
     resampled = resampler.Execute(image)
     return resampled
 
-def register_images():
-    # TODO register the images to a common space, e.g., using mutual information
-    # in principle this is not needed for t2w images and their masks
-    print("Image registration is not implemented yet.")
-    ...
+def reorient_image(image: sitk.Image, target_direction: tuple) -> sitk.Image:
+    """
+    Wrapper around SimpleITK's DICOMOrientImageFilter to reorient an image to a target direction.
+    Parameters:
+        image (sitk.Image): Input image.
+        target_direction (tuple): Target direction as a string of 6 characters.
+            Info on https://www.aliza-dicom-viewer.com/manual/orientation
+    Returns:
+        sitk.Image: Reoriented image.
+    """
+    return sitk.DICOMOrient(image, target_direction)
 
 def combine_zonal_masks(
     zonal_mask: sitk.Image,
@@ -293,6 +299,19 @@ def to_array(image: sitk.Image) -> np.ndarray:
         np.ndarray: Numpy array representation of the image.
     """
     return sitk.GetArrayFromImage(image)  # shape: [slices, height, width]
+
+def describe_image(img: sitk.Image):
+    """
+    Print basic information about the image, such as size, spacing, origin and direction.
+    """
+    print("__" * 30)
+    print("Size (voxels):", img.GetSize())
+    print("Spacing (mm):", tuple(round(s, 3) for s in img.GetSpacing()))
+    print("Origin:", tuple(round(o, 3) for o in img.GetOrigin()))
+    print("Direction:", tuple(round(d, 3) for d in img.GetDirection()))
+    print("__" * 30, end="\n\n")
+
+    return img # for pipeline compatibility
 
 def create_filename(output_dir: str, index: int, prefix: str, ending: str, channel_id: str) -> str:
     return os.path.join(output_dir, f"{prefix}{index:04d}{channel_id}{ending}")
@@ -393,18 +412,10 @@ def preprocess_pairs_parallel(img_lbl_pairs: list[tuple],
     
     return results
 
-def describe_image(img: sitk.Image):
-    """
-    Print basic information about the image, such as size, spacing, origin and direction.
-    """
-    print("__" * 30)
-    print("Size (voxels):", img.GetSize())
-    print("Spacing (mm):", tuple(round(s, 3) for s in img.GetSpacing()))
-    print("Origin:", tuple(round(o, 3) for o in img.GetOrigin()))
-    print("Direction:", tuple(round(d, 3) for d in img.GetDirection()))
-    print("__" * 30, end="\n\n")
 
-    return img # for pipeline compatibility
+
+
+
 
 
 

@@ -228,6 +228,50 @@ def test_swap_zonal_mask_values():
             save=f"./imgs/swapped_mask_test_{i}.png",
         )
 
+def test_rotate_3d_image_z_axis():
+    """
+    Test the rotate_3d_image function for rotation around the z-axis.
+    Saves the rotated image for visual inspection.
+    """
+    print("Testing rotate_3d_image function for z-axis rotation...", end="\n\n")
+
+    path = "/media/guest/PORT-DISK/Datasets/Prostate-Datasets/decathlon/Task05_Prostate/"
+    # Pick a random image from the dataset
+    data_analyzer = DataAnalyzer(path)    
+    data_analyzer.regex = "^p"
+    image_path = data_analyzer.pick_random("labelsTr", 1, type="file")
+
+    print(f"Processing image: {image_path}")
+
+    # Load the image
+    image = load_image(image_path)
+
+    # Rotate the image 180 degrees around the z-axis
+    rotated_image = reorient_image(image, "RPS") # right, posterior, superior
+
+    # Save the rotated image for visual inspection
+    data_analyzer.show_image(
+        image_path,
+        rotated_image,
+    )
+    describe_image(image)
+    describe_image(rotated_image)
+
+    # now the same with an image that is not a label
+    image_path = data_analyzer.pick_random("imagesTr", 1, type="file")
+    print(f"Processing image: {image_path}")
+    
+    image = load_image(image_path)
+    rotated_image = reorient_image(image, "RPS")  # right, posterior, superior
+    
+    data_analyzer.show_image(
+        image,
+        rotated_image,
+    )
+    describe_image(image)
+    describe_image(rotated_image)
+
+
 
 if __name__ == "__main__":
     import os
@@ -247,11 +291,12 @@ if __name__ == "__main__":
 
     # Uncomment the function you want to test
     #normalization_test()
-    roi_test()
+    #roi_test()
     # n4_test()
     #test_resample_mask()
     #test_combine_zonal_masks()
     #test_swap_zonal_mask_values()
+    test_rotate_3d_image_z_axis()
 
     # clean all .nii.gz files in the imgs folder after finished
     for file in os.listdir("./imgs"):
