@@ -4,6 +4,9 @@
 *.log
 *.nii.gz
 imgs/*
+data_inventory.json
+data_jsons/*
+
 # papermill output
 output.ipynb
 out*.ipynb

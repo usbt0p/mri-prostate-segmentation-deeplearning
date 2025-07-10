@@ -11,10 +11,10 @@ import os
 RAW_DATA_ROOT = "/home/guest/work/Datasets"
 
 # these paths are used to save the preprocessed data following nnUNet's conventions
-OUT_ROOT = "/media/guest/Datasets/nnUNet_raw/"
+OUT_ROOT = "/media/guest/PORT-DISK/Datasets/nnUNet_raw/"
 assert os.path.exists(OUT_ROOT), f"Output root {OUT_ROOT} does not exist."
 
-DATASET_NAME = "Dataset001_prostate158"
+DATASET_NAME = "Dataset002_prostate158"
 
 # Format for images: {CASE_IDENTIFIER(includes an id)}_{XXXX}.{FILE_ENDING}
 # Format for labels: {CASE_IDENTIFIER(includes an id)}.{FILE_ENDING}
