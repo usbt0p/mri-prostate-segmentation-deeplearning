@@ -2,6 +2,7 @@
 
 import os
 import sys
+import json
 import time
 import psutil
 import torch
@@ -41,54 +42,26 @@ def load_data_splits(data_dir):
     """Load prepared data splits"""
     data_dir = Path(data_dir)
     
+    NFOLDS = 5
     # Load file lists
     train_files = []
-    val_files = []
+    folds = []
+
+    with open(data_dir / "train_data.json", 'r') as f:
+        train_files = json.load(f)
+        tr = len(train_files['images'])
+        print(f"Loaded {tr} training samples from JSON")
     
-    # Load training data
-    train_dir = data_dir / "train"
-    if train_dir.exists():
-        anat_files = sorted(train_dir.glob("anat_*.nii"))
-        for anat_file in anat_files:
-            mask_file = train_dir / anat_file.name.replace("anat_", "mask_")
-            if mask_file.exists():
-                train_files.append({
-                    "image": str(anat_file),
-                    "label": str(mask_file)
-                })
-    
-    # Load validation data
-    val_dir = data_dir / "val"
-    if val_dir.exists():
-        anat_files = sorted(val_dir.glob("anat_*.nii"))
-        for anat_file in anat_files:
-            mask_file = val_dir / anat_file.name.replace("anat_", "mask_")
-            if mask_file.exists():
-                val_files.append({
-                    "image": str(anat_file),
-                    "label": str(mask_file)
-                })
-    
-    # If no prepared data, fall back to original single file
-    if not train_files and not val_files:
-        print("No prepared data found, using original single file...")
-        input_dir = Path("inputs")
-        anat_path = input_dir / "anat.nii"
-        mask_path = input_dir / "mask.nii"
-        
-        if anat_path.exists() and mask_path.exists():
-            single_data = {
-                "image": str(anat_path),
-                "label": str(mask_path)
-            }
-            # Use same data for train and val for overfitting
-            train_files = [single_data] * 10  # Duplicate for overfitting
-            val_files = [single_data] * 2
-        else:
-            raise FileNotFoundError("No data files found")
-    
-    print(f"Loaded {len(train_files)} training samples and {len(val_files)} validation samples")
-    return train_files, val_files
+    for i in range(NFOLDS):
+        fold_files = [
+            {"image": img, "label": lbl} for img, lbl in zip(
+                train_files['images'][i:50:5], 
+                train_files['labels'][i:50:5])
+        ]
+        folds.append(fold_files)
+    print(f"Created {NFOLDS} folds with {len(folds[0])} samples each")
+
+    return train_files, folds
 
 def create_transforms(is_train=True):
     """Create data transforms with proper label handling"""
@@ -101,11 +74,21 @@ def create_transforms(is_train=True):
         LoadImaged(keys=["image", "label"]),
         EnsureChannelFirstd(keys=["image", "label"]),
         Orientationd(keys=["image", "label"], axcodes="RAS"),
-        Spacingd(keys=["image", "label"], pixdim=(1.0, 1.0, 1.0), mode=("bilinear", "nearest")),
+
+        # TODO investigar y cambiar
+        Spacingd(keys=["image", "label"], pixdim=(0.5, 0.5, 3.0), 
+                  mode=("bilinear", "nearest")),
+
         # Ensure divisible dimensions for UNet
-        ResizeWithPadOrCropd(keys=["image", "label"], spatial_size=(160, 256, 256)),
+        # TODO esto es para estar seguros de que no hay problemas con las dimensiones
+        # TODO poner y quitar esto para saber si es totalmente necesario
+        ResizeWithPadOrCropd(keys=["image", "label"], 
+                             # TODO investigar y cambiar
+                             spatial_size=(160, 256, 256)),
+        # TODO investigar y cambiar
         ScaleIntensityRanged(keys=["image"], a_min=-1000, a_max=1000, b_min=0.0, b_max=1.0, clip=True),
         NormalizeIntensityd(keys=["image"], nonzero=True, channel_wise=True),
+        
         # Ensure labels are integers
         AsDiscreted(keys=["label"], rounding="torchrounding"),
         EnsureTyped(keys=["image", "label"], dtype=[torch.float32, torch.long])
@@ -114,6 +97,11 @@ def create_transforms(is_train=True):
     if is_train:
         # More aggressive augmentation for overfitting
         train_transforms = base_transforms + [
+            # TODO investigar y cambiar
+            # TODO buscar function que mantenga al menos un voxel de mascara
+            # esto es muy importante: si no hay máscara, hay explosion / desvanecimiento de gradientes
+            # estimar el tamaño de la roi de forma que contanga al 
+            # menos un cuarto de prostata (o asi, (100,100,100))
             RandSpatialCropd(keys=["image", "label"], roi_size=(80, 80, 80), random_size=False),
             RandFlipd(keys=["image", "label"], spatial_axis=[0, 1, 2], prob=0.7),
             RandRotate90d(keys=["image", "label"], prob=0.7, spatial_axes=[0, 1]),
@@ -236,7 +224,7 @@ def validate_epoch(model, val_loader, loss_function, dice_metric, device, epoch,
     
     # Log to tensorboard
     writer.add_scalar("Loss/Validation", epoch_loss / len(val_loader), epoch)
-    writer.add_scalar("Dice/Validation", mean_dice, epoch)
+    writer.add_scalar("Dice/Validation", mean_dice, epoch) # FIXME
     
     return epoch_loss / len(val_loader), mean_dice
 
@@ -258,15 +246,25 @@ def main():
     # Setup tensorboard
     writer = SummaryWriter(log_dir=output_dir / "logs")
     
-    try:
-        # Load data
-        print("Loading data...")
-        train_files, val_files = load_data_splits("data")
+    #try:
+    # Load data
+    print("Loading data...")
+    train_files, folds = load_data_splits("/home/guest/code/data_jsons")
+    
+    # Cross-validation loop
+    best_dice_scores = []
+    for fold_idx, fold_files in enumerate(folds):
+        print(f"Starting fold {fold_idx + 1}/{len(folds)}")
+        
+        # Split data into training and validation sets
+        val_files = fold_files
+        train_files_fold = [
+            f for idx, f in enumerate(folds) if idx != fold_idx 
+        ]
         
         # Load first sample to get number of classes
-        sample_data = nib.load(train_files[0]["label"])
+        sample_data = nib.load(val_files[0]["label"])
         sample_mask = sample_data.get_fdata()
-        # Ensure proper integer rounding for classes
         sample_mask = np.rint(sample_mask).astype(int)
         num_classes = int(np.max(sample_mask)) + 1
         print(f"Number of classes: {num_classes}")
@@ -276,10 +274,10 @@ def main():
         val_transforms = create_transforms(is_train=False)
         
         # Create datasets
-        train_dataset = Dataset(data=train_files, transform=train_transforms)
+        train_dataset = Dataset(data=train_files_fold, transform=train_transforms)
         val_dataset = Dataset(data=val_files, transform=val_transforms)
         
-        # Create data loaders with more aggressive settings for overfitting
+        # Create data loaders
         train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=0, pin_memory=True)
         val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=0, pin_memory=True)
         
@@ -288,28 +286,21 @@ def main():
         model = create_model(num_classes, device)
         print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
         
-        # Setup loss function with class weights to handle imbalance
-        # Calculate class weights (inverse of frequency)
-        class_weights = torch.tensor([1.0, 20.0, 5.0, 8.0]).to(device)  # Higher weights for rare classes
-        
-        # Use simpler DiceCE loss first to debug shape issues
-        loss_function = DiceCELoss(
-            to_onehot_y=num_classes, 
-            softmax=True,
-            include_background=False
-        )
-        optimizer = torch.optim.Adam(model.parameters(), lr=2e-4, weight_decay=1e-6)  # Higher LR, less regularization
+        # Setup loss function and optimizer
+        loss_function = DiceCELoss(to_onehot_y=num_classes, softmax=True, include_background=False)
+        optimizer = torch.optim.Adam(model.parameters(), lr=2e-4, weight_decay=1e-6)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=15, factor=0.5)
         
         # Setup metrics
         dice_metric = DiceMetric(include_background=False, reduction="mean")
-        
+    
         # Training loop
         print("Starting training...")
-        num_epochs = 200  # Higher number for overfitting
+        num_epochs = 10 # 100  # Higher number for overfitting
         best_dice = 0
         epochs_without_improvement = 0
-        patience = 30  # Patience for early stopping
+        patience = 10  # Patience for early stopping
+        n_epochs_to_save = 10
         
         for epoch in range(num_epochs):
             epoch_start_time = time.time()
@@ -334,8 +325,10 @@ def main():
             
             # Additional debugging info
             if epoch < 5:  # First 5 epochs
-                print(f"  Loss decreasing: {train_loss < 1.5}")
-                print(f"  Dice improving: {val_dice > 0.1}")
+                print(f"  Train Loss: {train_loss:.4f} (Threshold: < 1.0 for good start)")
+                print(f"  Val Dice: {val_dice:.4f} (Threshold: > 0.2 for improvement)")
+                print(f"  Loss decreasing: {'Yes' if train_loss < 1.0 else 'No'}")
+                print(f"  Dice improving: {'Yes' if val_dice > 0.2 else 'No'}")
             
             # Save best model
             if val_dice > best_dice:
@@ -352,8 +345,8 @@ def main():
             else:
                 epochs_without_improvement += 1
             
-            # Save checkpoint every 20 epochs
-            if (epoch + 1) % 20 == 0:
+            # Save checkpoint every x epochs
+            if (epoch + 1) % n_epochs_to_save == 0:
                 torch.save({
                     'epoch': epoch,
                     'model_state_dict': model.state_dict(),
@@ -363,9 +356,9 @@ def main():
                 }, output_dir / f"checkpoint_epoch_{epoch+1}.pth")
             
             # Early stopping if overfitting achieved
-            if val_dice > 0.90:  # Lower threshold for overfitting
-                print(f"Overfitting achieved! Dice: {val_dice:.4f}")
-                break
+            # if val_dice > 0.90:  # Lower threshold for overfitting
+            #     print(f"Overfitting achieved! Dice: {val_dice:.4f}")
+            #     break
             
             # Early stopping if no improvement for patience epochs
             if epochs_without_improvement >= patience:
@@ -374,12 +367,13 @@ def main():
         
         print(f"Training completed! Best Dice: {best_dice:.4f}")
         
-    except Exception as e:
-        print(f"Error during training: {e}")
-        sys.exit(1)
+    # except Exception as e:
+    #     print(f"Error during training: {e}")
+    #     sys.exit(1)
     
-    finally:
-        writer.close()
+    # finally:
+    writer.close()
 
 if __name__ == "__main__":
     main()
+    #load_data_splits("/home/guest/code/data_jsons")
