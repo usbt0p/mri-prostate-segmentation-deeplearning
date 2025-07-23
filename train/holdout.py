@@ -97,4 +97,4 @@ if __name__ == "__main__":
     print(f"Joined JSON saved at: {output_file}")
     print(f"Total images: {len(inventory['images'])}, Total labels: {len(inventory['labels'])}")
 
-    generate_holdout(inventory, test_ratio=0.15, out_dir="./data_jsons")
+    generate_holdout(inventory, test_ratio=0.1, out_dir="./data_jsons")
