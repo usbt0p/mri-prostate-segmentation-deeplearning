@@ -1,6 +1,8 @@
 monai
 # needed for reading nifti files with monai
 nibabel 
+tensorboard
+tensorflow
 
 simpleitk
 
