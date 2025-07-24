@@ -37,6 +37,7 @@ from monai.transforms import (
     AsDiscreted,
     ResizeWithPadOrCropd,
     Lambda,
+    AsDiscrete,
 )
 from monai.data import Dataset, DataLoader, create_test_image_3d
 from monai.losses import DiceCELoss
@@ -175,6 +176,10 @@ def train_epoch(model, train_loader, optimizer, loss_function, device, epoch, wr
     model.train()
     epoch_loss = 0
 
+    print("=" * 50)
+    print(f"Epoch {epoch + 1} Training")
+    print("=" * 50, end="\n\n")
+
     for batch_idx, batch_data in enumerate(train_loader):
         inputs = batch_data["image"].to(device)
         targets = batch_data["label"].to(device).long()
@@ -221,12 +226,12 @@ def train_epoch(model, train_loader, optimizer, loss_function, device, epoch, wr
 
 
 def validate_epoch(
-    model, val_loader, loss_function, dice_metric, device, epoch, writer
+    model, val_loader, loss_function, dice_metric, device, epoch, writer, num_classes
 ):
     """Validate for one epoch"""
     model.eval()
     epoch_loss = 0
-    #dice_metric.reset()
+    dice_metric.reset()
 
     with torch.no_grad():
         for batch_data in val_loader:
@@ -244,9 +249,15 @@ def validate_epoch(
             loss = loss_function(outputs, targets)
             epoch_loss += loss.item()
 
+            # Debug: Check targets
+            print(f"Debug - Target unique values: {torch.unique(targets)}")
+            print(f"Debug - Target shape: {targets.shape}")
+
             # Calculate dice score
             outputs_softmax = torch.softmax(outputs, dim=1)
-            dice_metric(y_pred=outputs_softmax, y=targets)
+            binarizer = AsDiscrete(argmax=True)
+            pred = binarizer(outputs_softmax)
+            dice_metric(y_pred=pred, y=targets)
 
             # Debug: Print some stats for first batch of first epoch
             if epoch == 0 and len(dice_metric._buffers) == 1:
@@ -255,15 +266,17 @@ def validate_epoch(
                 print(f"  Debug - Target classes: {torch.unique(targets)}")
                 print(f"  Debug - Output shape: {outputs.shape}")
 
-    # Get mean dice score
-    mean_dice = dice_metric.aggregate().item()
-    dice_metric.reset()
+            # Get mean dice score
+            mean_dice = dice_metric.aggregate().item()
+            # dice_metric.reset()
 
-    # Log to tensorboard
-    writer.add_scalar("Loss/Validation", epoch_loss / len(val_loader), epoch)
-    writer.add_scalar("Dice/Validation", mean_dice, epoch)
+            # Log to tensorboard
+            mean_loss = epoch_loss / len(val_loader)
+            val_step = epoch * len(val_loader)
+            writer.add_scalar("Loss/Validation", mean_loss, val_step)
+            writer.add_scalar("Dice/Validation", mean_dice, val_step)
 
-    return epoch_loss / len(val_loader), mean_dice
+    return mean_loss, mean_dice
 
 
 def main():
@@ -288,6 +301,9 @@ def main():
     # Load data
     print("Loading data...")
     train_files, val_files = load_data_splits("/home/guest/code/data_jsons")
+    
+    # FIXME REMOVE; ONLY FOR DEBUGGING
+    #train_files, val_files = train_files[:20], val_files[:20]
 
     # Load first sample to get number of classes
     sample_data = nib.load(train_files[0]["label"])
@@ -317,12 +333,6 @@ def main():
     print("Creating model...")
     model = create_model(num_classes, device)
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
-
-    # Setup loss function with class weights to handle imbalance
-    # Calculate class weights (inverse of frequency)
-    class_weights = torch.tensor([1.0, 20.0, 5.0, 8.0]).to(
-        device
-    )  # Higher weights for rare classes
 
     # Use simpler DiceCE loss first to debug shape issues
     loss_function = DiceCELoss(
@@ -355,7 +365,14 @@ def main():
 
         # Validate
         val_loss, val_dice = validate_epoch(
-            model, val_loader, loss_function, dice_metric, device, epoch, writer
+            model,
+            val_loader,
+            loss_function,
+            dice_metric,
+            device,
+            epoch,
+            writer,
+            num_classes,
         )
 
         # Update scheduler
