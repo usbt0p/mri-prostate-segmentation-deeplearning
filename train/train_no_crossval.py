@@ -297,8 +297,6 @@ def main():
     # Setup tensorboard
     writer = SummaryWriter(log_dir=output_dir / "logs")
 
-    # try:
-    # Load data
     print("Loading data...")
     train_files, val_files = load_data_splits("/home/guest/code/data_jsons")
     
@@ -435,11 +433,6 @@ def main():
 
     print(f"Training completed! Best Dice: {best_dice:.4f}")
 
-    # except Exception as e:
-    #     print(f"Error during training: {e}")
-    #     sys.exit(1)
-
-    # finally:
     writer.close()
 
 
