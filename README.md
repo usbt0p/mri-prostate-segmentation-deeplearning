@@ -100,3 +100,11 @@ do data exploration to find the voxel size counts and usee it to inform the new 
     # "overwrite_image_reader_writer": "SimpleITKIO",  # optional! If not provided nnU-Net will automatically determine the ReaderWriter
 }
 ```
+
+### Citations
+
+For training, the annotations derived from Bosma et al. where used.
+https://grand-challenge.org/algorithms/prostate-segmentation/
+```
+@article{PICAI_Study_design, author={Anindo Saha AND Jasper J. Twilt AND Joeran S. Bosma AND Bram van Ginneken AND Derya Yakar AND Mattijs Elschot AND Jeroen Veltman AND Jurgen Fütterer AND Maarten de Rooij AND Henkjan Huisman}, title={{Artificial Intelligence and Radiologists at Prostate Cancer Detection in MRI: The PI-CAI Challenge (Study Protocol)}}, year={2022}, doi={10.5281/zenodo.6667655} }
+```
