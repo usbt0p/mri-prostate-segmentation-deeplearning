@@ -1,105 +1,259 @@
-# Anatomical segmentation of the prostate gland from MRI images using Deep Learning techniques and multiple datasets
+# Anatomical Segmentation of the Prostate Gland from MRI Images using Deep Learning
+
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview
-This repository contains code that aims to provide a comprehensive pipeline for the anatomical segmentation of the prostate gland from MRI images using Deep Learning techniques. The code is designed to work with multiple datasets and provides preprocessing steps, model training, and evaluation.
 
-Several datasets have been used in this project, including:
+This repository provides a comprehensive pipeline for anatomical segmentation of the prostate gland from MRI images using deep learning techniques. 
+It focuses on multi-dataset preprocessing, analysis, and preparation for training segmentation models compatible with frameworks like nnU-Net and MONAI.
+A training script is also provided, using U-Net, altough the convergence and metrics are on par with nnUnet.
+Notebooks with dataset exploration are provided, as well as modules for data analysis and manipulation.
 
-| Dataset Name | Description | Link |
-|--------------|-------------|------|
-| PICAI        |             |      |
-| # TODO    |             |      |
+### Key Features
 
-Notebooks with dataset exploration are provided, as well as modules for data analysis and manipulation, preprocessing, # TODO ...
+- **Multi-dataset support**: Works with PICAI, Prostate158, and Medical Segmentation Decathlon datasets
+- **Comprehensive preprocessing pipeline**: Includes resampling, ROI extraction, N4 bias correction, and other data preparation steps
+- **Parallel processing**: Efficient batch processing with progress tracking
+- **Data exploration tools**: Interactive analysis and visualization of medical imaging datasets
+- **nnU-Net compatibility**: Automatic data structuring following nnU-Net conventions
+- **Zonal segmentation**: Support for peripheral zone (PZ) and transition zone (TZ) segmentation
 
-## Installation and Usage
-    TODO
+### Supported Datasets
 
-## TODO's
+| Dataset | Description | Cases | Modalities | Link |
+|---------|-------------|-------|------------|----- |
+| **PICAI** | PI-CAI Challenge dataset with expert annotations for prostate cancer detection | 1,500 public cases | T2w, DWI, ADC | [pi-cai.grand-challenge.org](https://pi-cai.grand-challenge.org/) |
+| **Prostate158** | Expert-annotated 3T MRI dataset for anatomical zones and cancer detection | 158 cases | T2w, DWI, ADC | [GitHub](https://github.com/kbressem/prostate158) |
+| **Medical Decathlon Task05** | Prostate segmentation task from Medical Segmentation Decathlon | 48 cases | T2w, ADC | [medicaldecathlon.com](http://medicaldecathlon.com/) |
 
-### DOUBTS
+## Installation
 
-- TODO figure out if different prepsocessing steps are order - invariant,
-or if they should be applied in a specific order.
-for example, if we apply n4 bias field correction, should we apply it before or after
-extracting the region of interest? after = less information to do the correction, but
-faster, before = more information, but slower.
-should alignignement / registration be done before or after the region of interest extraction?
+### Prerequisites
 
-- TODO determine the upscaling / downscaling process:
-order matters here, when to do it?
+- Python 3.8 or higher
+- CUDA-compatible GPU (for training, preprocessing can be done in CPU in reasonable time)
 
-- TODO in resampling: must conserve the quality, i.e. not resample to a bigger
-voxel size or details will be lost!!
-do data exploration to find the voxel size counts and usee it to inform the new size
+### Dependencies Installation
 
-- I've used a different cropping percentage for each of the datasets, but in testing, i must determine
- a single percentage that works for all datasets. average? will setting the most restrictive percentage
- worsen the results for some datasets? cropping too much surely will, but maybe cropping too little too since the data will be all in a similar scale
-
-### TODO (Training and eval phase)
-
-- adapt data loading from example
-- small training test with a few images
-- cast all images to same size after cropping. See if it can be done in the resampling. This might also be automatically performed by nnU-Net or other frameworks.
-
-#### DONE
-1. preprocess data and save it to structured folders (nnUnet Format)
-1. save preprocessed datasets to disk
-1. try loading a small dataset in monai (from disk)
-1. download the remaining datasets (script)
-2. make some analysis of them 
-6. analyze masks for each dataset, ensure that the convetion in the masks is made the same: (pz is 1, tz is 2, and background is 0).
-7. re-structure folders for nnUnet, remove unused files (non-mask or t2w)
-8. fix small regressions at the start of the notebooks
-
-## Advancement logs
-
-### Data exploration
-- A data exploration module and class has been created to provide a consistent interface for data exploration across different datasets.
-- Notebook for data exploration on PICAI dataset has been created. Data exploration includes:
-    - Basic statistics of the dataset.
-    - Visualization of the metadata distribution (vendor, mri type, orientation, etc.).
-    - Analysis of the voxel size and shape of the images.
-    - Analysis of the number of images per patient.
-    - Analysis of the distribution of image sizes (resolution).
-    - Analysis of the intensity distribution of some images
-    - Analysis of the approximate image center around which to set the ROI.
-    - Visualization of the centered bounding box around the prostate gland.
-- Notebook for data exploration on Prostate158 dataset, similar to the previous one, has been created.
-
-### Preprocessing
-
-- Background masks and registering have been removed from the preprocessing as they are not needed.
-- Normalization (zscore or minmax) has ben implemented.
-- N4 bias field correction has been implemented.
-- Image loading from path, with 3D en casting of 4D images has been implemented.
-- Image cropping / region of interest extraction has been implemented.
-- Resampling has been implemented.
-- Zonal mask combination has been implemented, which combines the two zonal masks into a single whole gland mask.
-- Zonal mask value swapping has been implemented, which swaps the values of the zonal masks (e.g. pz and tz) to a single value. This is needed to keep consitency in the masks labels troughout different datasets.
-- Simple image description for debugging has been implemented (e.g. image shape, voxel size, etc.).
-- Visual inspection tests have been implemented for the available preprocessing steps. They show images before and after the preprocessing step, as well as some data like intensity distribution and shape. These tests are not meant to be exhaustive, but rather to provide a quick visual check of the preprocessing steps.
--  A pipeline system has been implemented to allow for easy chaining of preprocessing steps. 
-- Methods have been implemented to preprocess the images and labels in pairs, in parallel, and to save them also in parallel, ensuring that the images always match their labels.
-
-
-## Data wrangling
-
-``` python
-# this is nnUnet's expected metadata json
-{
-    "channel_names": {"0": "T2"},  # we have only one channel, so we use "0" as the key
-    "labels": {  # IMPORTANT this is our label mapping
-        "background": 0,
-        "TZ": 1, # use convention from PI-CAI (it provides the most images)
-        "PZ": 2,
-    },
-    "numTraining": len(image_paths),  # number of training images
-    "file_ending": FILE_ENDING
-    # "overwrite_image_reader_writer": "SimpleITKIO",  # optional! If not provided nnU-Net will automatically determine the ReaderWriter
-}
+1. Clone the repository:
+```bash
+git clone https://github.com/your-username/mri-prostate-segmentation-deeplearning.git
+cd mri-prostate-segmentation-deeplearning
 ```
+
+2. Install required packages:
+```bash
+pip install -r requirements.txt
+```
+
+### Core Dependencies
+
+- **monai**: Medical imaging AI framework
+- **nibabel**: NIfTI file reading and writing
+- **simpleitk**: Medical image processing and analysis
+- **matplotlib**: Data visualization
+- **numpy**: Numerical computing
+- **pandas**: Data analysis and manipulation
+- **ipywidgets**: Interactive Jupyter notebook widgets
+
+## Configuration
+
+### Dataset Setup
+
+1. **Download datasets** using the provided script:
+```bash
+./download.sh
+```
+This downloads the PICAI dataset folds from Zenodo.
+You might want to download the rest of the datasets as well.
+
+2. **Configure data paths** in the preprocessing scripts:
+```python
+# Update paths in loadingData/build_data_*.py
+RAW_DATA_ROOT = "/path/to/your/datasets"
+OUT_ROOT = "/path/to/output/nnUNet_raw/"
+```
+
+3. **Set up output directories** for nnU-Net format:
+```bash
+mkdir -p /path/to/output/nnUNet_raw/Dataset001_picai/{imagesTr,labelsTr}
+```
+
+### Preprocessing Parameters
+
+Key parameters can be configured in the build scripts:
+
+```python
+# Resampling spacing (x, y, z) in mm
+spacing = (0.5, 0.5, 3.0)
+
+# ROI crop factor (0.6 = 60% crop around center)
+crop_factor = 0.65
+
+# Label value swapping for consistency across datasets
+bool_swap_mask_values = False
+```
+
+## Usage
+
+### Quick Start
+
+1. **Data Exploration**:
+```bash
+# Open Jupyter notebooks for dataset analysis
+jupyter notebook exploratoryAnalysis/explore_picai.ipynb
+```
+
+2. **Dataset Preprocessing**:
+```bash
+# Preprocess PICAI dataset
+python loadingData/build_data_picai.py
+
+# Preprocess other datasets
+python loadingData/build_data_decathlon.py
+python loadingData/build_data_158.py
+```
+
+3. **Preprocessing Pipeline Testing**:
+```bash
+# Test individual preprocessing functions
+python preprocessing/TestPreprocessing.py
+```
+
+### Detailed Workflow
+
+#### 1. Dataset Exploration
+
+Use the `DataAnalyzer` class to explore datasets. Example:
+
+```python
+from exploratoryAnalysis.DataAnalyzer import DataAnalyzer
+
+# Initialize analyzer
+analyzer = DataAnalyzer("/path/to/datasets")
+analyzer.regex = ".*_t2w.mha$"  # Filter for T2-weighted images
+
+# Collect metadata
+df = analyzer.collect_metadata_from_subdirs("picai_folds/picai_images_fold0")
+
+# Visualize images
+analyzer.show_image("path/to/image.mha", save="output.png")
+
+# Generate intensity histograms
+analyzer.image_intensity_histogram("path/to/image.mha", plot=True)
+```
+
+#### 2. Preprocessing Pipeline
+
+Create custom preprocessing pipelines. Example:
+
+```python
+from preprocessing.Pipeline import Pipeline
+from preprocessing.PreProcessor import *
+
+# Initialize pipeline
+pipeline = Pipeline()
+
+# Add preprocessing steps
+pipeline.add(load_image) \
+        .add(resample_image, interpolator=sitk.sitkLinear, out_spacing=(0.5, 0.5, 3.0)) \
+        .add(get_region_of_interest, crop=0.65) \
+        .add(n4_bias_field_correction) \
+        .add(normalize_image, method="minmax")
+
+# Process images
+processed_images = pipeline.run(image_paths, parallel=True, max_workers=4)
+```
+
+#### 3. Batch Processing
+
+Process large datasets efficiently. Example:
+
+```python
+# Process image-label pairs in parallel
+from preprocessing.Utils import preprocess_pairs_parallel, save_pairs_parallel
+
+# Define pipelines for images and labels
+img_pipeline = Pipeline().add(load_image).add(resample_image)
+lbl_pipeline = Pipeline().add(load_image).add(resample_image, interpolator=sitk.sitkNearestNeighbor)
+
+# Process pairs
+paired_results = preprocess_pairs_parallel(
+    list(zip(image_paths, label_paths)), 
+    img_pipeline, 
+    lbl_pipeline, 
+    workers=8
+)
+
+# Save results
+out_images, out_labels = save_pairs_parallel(
+    paired_results, 
+    output_image_paths, 
+    output_label_paths, 
+    workers=8
+)
+```
+
+### Available Preprocessing Functions
+
+- **`load_image(path)`**: Load medical images with 4D→3D conversion if needed
+- **`resample_image(image, out_spacing, interpolator)`**: Resample to target spacing
+- **`get_region_of_interest(image, crop)`**: Extract ROI around prostate
+- **`n4_bias_field_correction(image)`**: Remove MRI bias field artifacts
+- **`normalize_image(image, method)`**: Z-score or min-max normalization
+- **`combine_zonal_masks(mask, pz_val, tz_val)`**: Combine PZ and TZ masks to form a WG mask
+- **`swap_zonal_mask_values(mask, val1, val2)`**: Swap mask label values
+- **`reorient_image(image, orientation)`**: Reorient to standard orientation
+
+
+## Project Structure
+
+```
+.
+├── exploratoryAnalysis/          # Dataset exploration and analysis
+│   ├── DataAnalyzer.py           # Main analysis class
+│   ├── explore_picai.ipynb       # PICAI dataset exploration
+│   ├── explore_decathlon.ipynb   # Decathlon dataset exploration
+│   └── explore_158.ipynb         # Prostate158 dataset exploration
+├── loadingData/                  # Dataset preprocessing scripts
+│   ├── build_data_picai.py       # PICAI preprocessing
+│   ├── build_data_decathlon.py   # Decathlon preprocessing
+│   ├── build_data_158.py         # Prostate158 preprocessing
+│   └── data.template.json        # nnU-Net metadata template
+├── preprocessing/                # Core preprocessing modules
+│   ├── Pipeline.py               # Preprocessing pipeline framework
+│   ├── PreProcessor.py           # Individual preprocessing functions
+│   ├── Utils.py                  # Utility functions
+│   └── TestPreprocessing.py      # Visual testing functions
+├── requirements.txt              # Python dependencies
+├── download.sh                   # Dataset download script
+└── README.md                     # This file
+```
+
+## Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/new-feature`)
+3. Commit your changes (`git commit -am 'Add new feature'`)
+4. Push to the branch (`git push origin feature/new-feature`)
+5. Create a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- [PI-CAI Challenge](https://pi-cai.grand-challenge.org/) for providing the PICAI dataset
+- [Prostate158](https://github.com/kbressem/prostate158) dataset contributors
+- [Medical Segmentation Decathlon](http://medicaldecathlon.com/) organizers
+- [nnU-Net](https://github.com/MIC-DKFZ/nnUNet) framework developers
+- [MONAI](https://monai.io/) community for medical imaging AI tools
+
+---
 
 ### Citations
 
