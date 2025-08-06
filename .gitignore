@@ -1,9 +1,13 @@
-
 ## specifics
 *.png
+*.gif
 *.log
 *.nii.gz
 imgs/*
+data_inventory.json
+data_jsons/*
+outputs/*
+
 # papermill output
 output.ipynb
 out*.ipynb

@@ -5,12 +5,15 @@
 
 ## Overview
 
-This repository provides a comprehensive pipeline for anatomical segmentation of the prostate gland from MRI images using deep learning techniques. The project focuses on multi-dataset preprocessing, analysis, and preparation for training segmentation models compatible with frameworks like nnU-Net and MONAI.
+This repository provides a comprehensive pipeline for anatomical segmentation of the prostate gland from MRI images using deep learning techniques. 
+It focuses on multi-dataset preprocessing, analysis, and preparation for training segmentation models compatible with frameworks like nnU-Net and MONAI.
+A training script is also provided, using U-Net, altough the convergence and metrics are on par with nnUnet.
+Notebooks with dataset exploration are provided, as well as modules for data analysis and manipulation.
 
 ### Key Features
 
 - **Multi-dataset support**: Works with PICAI, Prostate158, and Medical Segmentation Decathlon datasets
-- **Comprehensive preprocessing pipeline**: Includes resampling, ROI extraction, N4 bias correction, and normalization
+- **Comprehensive preprocessing pipeline**: Includes resampling, ROI extraction, N4 bias correction, and other data preparation steps
 - **Parallel processing**: Efficient batch processing with progress tracking
 - **Data exploration tools**: Interactive analysis and visualization of medical imaging datasets
 - **nnU-Net compatibility**: Automatic data structuring following nnU-Net conventions
@@ -29,7 +32,7 @@ This repository provides a comprehensive pipeline for anatomical segmentation of
 ### Prerequisites
 
 - Python 3.8 or higher
-- CUDA-compatible GPU (recommended for processing large datasets)
+- CUDA-compatible GPU (for training, preprocessing can be done in CPU in reasonable time)
 
 ### Dependencies Installation
 
@@ -63,6 +66,7 @@ pip install -r requirements.txt
 ./download.sh
 ```
 This downloads the PICAI dataset folds from Zenodo.
+You might want to download the rest of the datasets as well.
 
 2. **Configure data paths** in the preprocessing scripts:
 ```python
@@ -121,7 +125,7 @@ python preprocessing/TestPreprocessing.py
 
 #### 1. Dataset Exploration
 
-Use the `DataAnalyzer` class to explore datasets:
+Use the `DataAnalyzer` class to explore datasets. Example:
 
 ```python
 from exploratoryAnalysis.DataAnalyzer import DataAnalyzer
@@ -142,7 +146,7 @@ analyzer.image_intensity_histogram("path/to/image.mha", plot=True)
 
 #### 2. Preprocessing Pipeline
 
-Create custom preprocessing pipelines:
+Create custom preprocessing pipelines. Example:
 
 ```python
 from preprocessing.Pipeline import Pipeline
@@ -164,7 +168,7 @@ processed_images = pipeline.run(image_paths, parallel=True, max_workers=4)
 
 #### 3. Batch Processing
 
-Process large datasets efficiently:
+Process large datasets efficiently. Example:
 
 ```python
 # Process image-label pairs in parallel
@@ -193,43 +197,15 @@ out_images, out_labels = save_pairs_parallel(
 
 ### Available Preprocessing Functions
 
-- **`load_image(path)`**: Load medical images with 4D→3D conversion
+- **`load_image(path)`**: Load medical images with 4D→3D conversion if needed
 - **`resample_image(image, out_spacing, interpolator)`**: Resample to target spacing
 - **`get_region_of_interest(image, crop)`**: Extract ROI around prostate
 - **`n4_bias_field_correction(image)`**: Remove MRI bias field artifacts
 - **`normalize_image(image, method)`**: Z-score or min-max normalization
-- **`combine_zonal_masks(mask, pz_val, tz_val)`**: Combine PZ and TZ masks
+- **`combine_zonal_masks(mask, pz_val, tz_val)`**: Combine PZ and TZ masks to form a WG mask
 - **`swap_zonal_mask_values(mask, val1, val2)`**: Swap mask label values
 - **`reorient_image(image, orientation)`**: Reorient to standard orientation
 
-### Testing Preprocessing Functions
-
-Run visual tests for preprocessing functions:
-
-```python
-# Test specific functions
-python -c "from preprocessing.TestPreprocessing import *; roi_test()"
-python -c "from preprocessing.TestPreprocessing import *; n4_test()"
-python -c "from preprocessing.TestPreprocessing import *; normalization_test()"
-```
-
-### Output Format
-
-The pipeline generates nnU-Net compatible datasets:
-
-```
-Dataset001_picai/
-├── imagesTr/
-│   ├── picai_0_0000.nii.gz
-│   ├── picai_1_0000.nii.gz
-│   └── ...
-├── labelsTr/
-│   ├── picai_0.nii.gz
-│   ├── picai_1.nii.gz
-│   └── ...
-├── dataset.json
-└── preprocessing.json
-```
 
 ## Project Structure
 
@@ -255,90 +231,6 @@ Dataset001_picai/
 └── README.md                     # This file
 ```
 
-## Features and Capabilities
-
-### Data Exploration
-
-- **Comprehensive dataset analysis**: The `DataAnalyzer` class provides a unified interface for exploring medical imaging datasets
-- **Metadata extraction**: Automatically extracts DICOM metadata including vendor, MRI type, orientation, spacing, and clinical parameters
-- **Statistical analysis**: Generates distribution plots for voxel sizes, image dimensions, and intensity values
-- **Interactive visualization**: Built-in image display with slice selection and multi-image comparison
-- **ROI analysis**: Calculates centered bounding boxes around prostate regions for optimal cropping
-- **Parallel processing**: Multi-threaded metadata collection for large datasets
-
-### Preprocessing Pipeline
-
-- **Modular design**: Chain preprocessing functions using the `Pipeline` class
-- **Medical image optimized**: Specialized functions for MRI preprocessing including:
-  - **N4 bias field correction**: Removes scanner-induced intensity variations
-  - **Intelligent resampling**: Preserves image quality while standardizing voxel spacing
-  - **ROI extraction**: Crops images around prostate region to reduce computational load
-  - **Intensity normalization**: Z-score or min-max normalization options
-  - **4D to 3D conversion**: Handles multi-temporal or multi-contrast sequences
-
-- **Label processing**: Specialized functions for segmentation masks:
-  - **Zonal mask combination**: Merges peripheral and transition zone masks
-  - **Label value consistency**: Standardizes mask values across different datasets
-  - **Nearest neighbor resampling**: Preserves discrete label values during resampling
-
-- **Quality assurance**: 
-  - Visual testing functions for each preprocessing step
-  - Image-label correspondence verification
-  - Intensity distribution analysis before/after processing
-
-### Parallel Processing
-
-- **Batch processing**: Handles large datasets in memory-efficient batches
-- **Multi-threading**: Parallel execution with progress tracking
-- **Paired processing**: Ensures image-label correspondence during parallel operations
-- **Configurable workers**: Adjustable thread count based on system resources
-
-### Dataset Compatibility
-
-- **Multi-format support**: Handles NIfTI (.nii.gz), DICOM, and other medical formats
-- **Cross-dataset standardization**: Unified preprocessing for different data sources
-- **nnU-Net integration**: Automatic output formatting for nnU-Net framework
-- **Flexible labeling**: Configurable label mappings for different anatomical conventions
-
-
-## Label Conventions and Data Format
-
-### Segmentation Labels
-
-The project follows PI-CAI labeling conventions for consistency:
-
-```python
-# Standard label mapping
-labels = {
-    "background": 0,    # Background/non-prostate tissue
-    "TZ": 1,            # Transition Zone (central gland)
-    "PZ": 2,            # Peripheral Zone
-}
-```
-
-### nnU-Net Dataset Format
-
-Output datasets follow nnU-Net conventions:
-
-```json
-{
-    "channel_names": {"0": "T2"},
-    "labels": {
-        "background": 0,
-        "TZ": 1,
-        "PZ": 2
-    },
-    "numTraining": 1500,
-    "file_ending": ".nii.gz"
-}
-```
-
-### File Naming Convention
-
-- **Images**: `{prefix}_{case_id}_0000.nii.gz` (channel 0 for T2-weighted)
-- **Labels**: `{prefix}_{case_id}.nii.gz`
-- **Example**: `picai_042_0000.nii.gz` (image), `picai_042.nii.gz` (label)
-
 ## Contributing
 
 Contributions are welcome! Please:
@@ -353,19 +245,6 @@ Contributions are welcome! Please:
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Citation
-
-If you use this code in your research, please cite:
-
-```bibtex
-@misc{prostate-segmentation-pipeline,
-    title={MRI Prostate Segmentation Deep Learning Pipeline},
-    author={Your Name},
-    year={2024},
-    url={https://github.com/your-username/mri-prostate-segmentation-deeplearning}
-}
-```
-
 ## Acknowledgments
 
 - [PI-CAI Challenge](https://pi-cai.grand-challenge.org/) for providing the PICAI dataset
@@ -374,42 +253,12 @@ If you use this code in your research, please cite:
 - [nnU-Net](https://github.com/MIC-DKFZ/nnUNet) framework developers
 - [MONAI](https://monai.io/) community for medical imaging AI tools
 
-## Support
-
-For questions or issues:
-
-1. Check the [documentation](./CLAUDE.md)
-2. Search existing [issues](https://github.com/your-username/mri-prostate-segmentation-deeplearning/issues)
-3. Create a new issue with detailed description
-
 ---
 
-**Note**: This project is for research purposes. Please ensure you have appropriate permissions and follow ethical guidelines when working with medical data.
+### Citations
 
-## Development Status and Roadmap
-
-### Current Status ✅
-
-- [x] Multi-dataset preprocessing pipeline
-- [x] Parallel processing implementation
-- [x] Data exploration and visualization tools
-- [x] nnU-Net format compatibility
-- [x] Visual testing framework
-- [x] Comprehensive documentation
-
-### Planned Features 🚧
-
-- [ ] Deep learning model training integration
-- [ ] Automated hyperparameter optimization
-- [ ] Cross-validation framework
-- [ ] Performance evaluation metrics
-- [ ] Docker containerization
-- [ ] Automated testing suite
-- [ ] Additional dataset support
-
-### Research Questions 🔬
-
-- **Preprocessing order optimization**: Determining optimal sequence for N4 correction, ROI extraction, and resampling
-- **Cross-dataset generalization**: Evaluating preprocessing parameters that work across all datasets
-- **Quality preservation**: Balancing processing speed with image quality retention
-- **Label consistency**: Standardizing anatomical zone definitions across different annotation schemes
+For training, the annotations derived from Bosma et al. where used.
+https://grand-challenge.org/algorithms/prostate-segmentation/
+```
+@article{PICAI_Study_design, author={Anindo Saha AND Jasper J. Twilt AND Joeran S. Bosma AND Bram van Ginneken AND Derya Yakar AND Mattijs Elschot AND Jeroen Veltman AND Jurgen Fütterer AND Maarten de Rooij AND Henkjan Huisman}, title={{Artificial Intelligence and Radiologists at Prostate Cancer Detection in MRI: The PI-CAI Challenge (Study Protocol)}}, year={2022}, doi={10.5281/zenodo.6667655} }
+```
