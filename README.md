@@ -3,12 +3,37 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+## Index
+- [Overview](#overview)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Project Structure](#project-structure)
+- [Training](#training)
+- [Results](#results)
+- [Contributing](#contributing)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
+
 ## Overview
 
 This repository provides a comprehensive pipeline for anatomical segmentation of the prostate gland from MRI images using deep learning techniques. 
 It focuses on multi-dataset preprocessing, analysis, and preparation for training segmentation models compatible with frameworks like nnU-Net and MONAI.
-A training script is also provided, using U-Net, altough the convergence and metrics are on par with nnUnet.
+A training script is also provided, using U-Net, although the convergence and metrics are on par with nnUnet.
 Notebooks with dataset exploration are provided, as well as modules for data analysis and manipulation.
+
+The results, discussed in the [Results](#results) section, show promising performance similar to state-of-the-art methods. 
+
+<img src="docs/sample.png" alt="sample segmentation" width="800"/>
+
+### Goal and motivation
+Automatic segmentation of prostate zones (PZ, TZ) is essential since ≈70–75% of clinically significant prostate cancers (csPCa) originate in the peripheral zone (PZ). 
+
+Also, the PI-RADS scoring system depends on anatomical zoning—DWI/ADC for lesions in PZ, T2W for TZ—requiring accurate zonal masks for correct lesion assessment.
+
+Furthermore, manual zonal delineation on T2W images is time-consuming, tedious, and [prone to inter- and intra-observer variability](https://www.sciencedirect.com/science/article/pii/S0302283819308231?via%3Dihub#bib0050:~:text=There%20is%20large%20variability%20among%20radiologists%20in%20their%20detection%20of%20clinically%20significant%20(cs)%20prostate%20cancer%20(PCa)%20on%20multiparametric%20magnetic%20resonance%20imaging%20(mpMRI).), especially given anatomical heterogeneity and low tissue contrast.
+
+Since [recent reviews](https://pmc.ncbi.nlm.nih.gov/articles/PMC11294957/) show Dice scores ~0.90 (whole gland), ~0.87 (TZ), ~0.79 (PZ)—comparable to expert radiologists across varied datasets, the objective is to develop a model that can achieve similar performance, and attempt to make it more robust by utilizing multiple datasets.
 
 ### Key Features
 
@@ -230,6 +255,48 @@ out_images, out_labels = save_pairs_parallel(
 ├── download.sh                   # Dataset download script
 └── README.md                     # This file
 ```
+
+## Training
+A training script is provided to train a U-Net model on the preprocessed datasets. 
+
+The final training of the model, however, was done using the nnU-Net framework, which is highly recommended for its automated training and evaluation capabilities.
+The 3D-fullres U-Net architecture was used, which is suitable for volumetric data like MRI.
+Five folds of the PICAI dataset were used for training, with the model trained on the T2-weighted images and corresponding masks, and tested on a holdout set.
+
+The parameters reported by the nnU-Net training script were as follows:
+
+- **Architecture**: 3D-fullres U-Net
+- **Epochs**: 1000
+- **Batch size**: 2
+- **Learning rate**: 0.01
+- **Optimizer**: SGD
+- **Loss function**: DiceCE (RobustCrossEntropyLoss + MemoryEfficientSoftDiceLoss)
+- **Weight decay**: 3e-05
+- **Activation**: LeakyReLU
+- **Patch size**: 24 × 256 × 256
+
+## Results
+Results from the nnU-Net training on the PICAI dataset showed promising performance, with the model achieving competitive Dice scores across different anatomical zones.
+
+Here are the metrics reported after training on the dataset, achieved on the test set:
+
+<img src="docs/PICAI_3d_fullres_analysis_global_overview.png" alt="histograms" width="700"/>
+
+<img src="docs/fullres_distributions.png" alt="percase" width="800"/>
+
+
+### Best case example (dice score ~0.98)
+
+#### Prediction
+
+<img src="docs/best_pred_model.png" alt="best case example" width="600"/>
+
+#### Ground Truth
+<img src="docs/best_pred_groundtruth.png" alt="best case example ground truth" width="600"/>
+
+### Worst case example (dice score ~0.7)
+<img src="docs/worst_pred.png" alt="worst case example" width="600"/>
+
 
 ## Contributing
 

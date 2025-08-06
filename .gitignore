@@ -1,5 +1,6 @@
 ## specifics
 *.png
+!docs/*.png
 *.gif
 *.log
 *.nii.gz
