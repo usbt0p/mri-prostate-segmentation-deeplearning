@@ -17,9 +17,9 @@
 
 ## Overview
 
-This repository provides a comprehensive pipeline for anatomical segmentation of the prostate gland from MRI images using deep learning techniques. 
+This repository provides a comprehensive pipeline for anatomical segmentation of the prostate gland from MRI images using deep learning techniques, as well as the reports from training a segmentation model using the nnU-Net framework. 
 It focuses on multi-dataset preprocessing, analysis, and preparation for training segmentation models compatible with frameworks like nnU-Net and MONAI.
-A training script is also provided, using U-Net, although the convergence and metrics are on par with nnUnet.
+A training script is also provided, using U-Net, although the reported metrics and results come from nnUnet.
 Notebooks with dataset exploration are provided, as well as modules for data analysis and manipulation.
 
 The results, discussed in the [Results](#results) section, show promising performance similar to state-of-the-art methods. 
@@ -271,19 +271,47 @@ The parameters reported by the nnU-Net training script were as follows:
 - **Learning rate**: 0.01
 - **Optimizer**: SGD
 - **Loss function**: DiceCE (RobustCrossEntropyLoss + MemoryEfficientSoftDiceLoss)
+    - As defined in the nnU-Net paper, the formulation is a combination of cross-entropy and Dice loss, formulated as follows:
+    
+    - **Combined Loss**:
+        $$\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{dice}} + \mathcal{L}_{\text{CE}}$$
+
+    - **Memory Efficient Soft Dice Loss**:
+        $$\mathcal{L}_{\text{dice}} = -\frac{2}{|K|} \sum_{k \in K} \frac{\sum_{i \in I} u_i^k v_i^k}{\sum_{i \in I} u_i^k + \sum_{i \in I} v_i^k}$$
+        where $u$ is the softmax output of the network and $v$ is a one hot encoding of the ground truth segmentation map.
+            
 - **Weight decay**: 3e-05
 - **Activation**: LeakyReLU
 - **Patch size**: 24 × 256 × 256
 
 ## Results
-Results from the nnU-Net training on the PICAI dataset showed promising performance, with the model achieving competitive Dice scores across different anatomical zones.
+Results from the nnU-Net training on the PICAI dataset showed promising performance, with the model achieving competitive Dice scores across different anatomical zones similar to state-of-the-art methods,  [which stand at around](https://pmc.ncbi.nlm.nih.gov/articles/PMC11294957/) 0.90 for the whole gland, 0.87 for the transition zone (TZ), and 0.79 for the peripheral zone (PZ).
 
-Here are the metrics reported after training on the dataset, achieved on the test set:
+The metrics reported where calculated on a validation set on each one of the five folds of the PICAI dataset, and are as follows:
 
-<img src="docs/PICAI_3d_fullres_analysis_global_overview.png" alt="histograms" width="700"/>
+We can see the global overview of the results on the validation set for all folds. We see a difference in performance between the PZ and TZ, since the latter is easier to segment than the former.
 
+The dice score formulation is as follows:
+$$\text{Dice} = \frac{2 \cdot |A \cap B|}{|A| + |B|}$$
+where $A$ is the predicted mask and $B$ is the ground truth mask.   
+
+IoU (Intersection over Union) is also reported, which is defined as:
+$$\text{IoU} = \frac{|A \cap B|}{|A \cup B|}$$
+
+True positive (TP), false positive (FP), and false negative (FN) counts are also provided for each fold, and
+where calculated voxel-wise, meaning that the TP count is the number of voxels that are correctly predicted as part of the prostate zone, FP is the number of voxels that are incorrectly predicted as part of the prostate zone, and FN is the number of voxels that are part of the prostate zone but were not predicted as such.
+
+
+<img src="docs/PICAI_3d_fullres_analysis_global_overview.png" alt="global overview" width="800"/>
+
+The per-case results show the Dice scores distribution across all cases in the validation sets.
 <img src="docs/fullres_distributions.png" alt="percase" width="800"/>
 
+A fold comparison is provided (the third fold is missing as it wasn't reported in the nnU-Net training):
+
+<img src="docs/fold_comparison.png" alt="fold comparison" width="600"/>
+
+The rest of the datasets are to be tested.
 
 ### Best case example (dice score ~0.98)
 
