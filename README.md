@@ -271,15 +271,17 @@ The parameters reported by the nnU-Net training script were as follows:
 - **Learning rate**: 0.01
 - **Optimizer**: SGD
 - **Loss function**: DiceCE (RobustCrossEntropyLoss + MemoryEfficientSoftDiceLoss)
-    - As defined in the nnU-Net paper, the formulation is a combination of cross-entropy and Dice loss, formulated as follows:
-    
-    - **Combined Loss**:
-        $$\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{dice}} + \mathcal{L}_{\text{CE}}$$
 
-    - **Memory Efficient Soft Dice Loss**:
-        $$\mathcal{L}_{\text{dice}} = -\frac{2}{|K|} \sum_{k \in K} \frac{\sum_{i \in I} u_i^k v_i^k}{\sum_{i \in I} u_i^k + \sum_{i \in I} v_i^k}$$
-        where $u$ is the softmax output of the network and $v$ is a one hot encoding of the ground truth segmentation map.
-            
+  - As defined in the nnU-Net paper, the formulation is a combination of cross-entropy and Dice loss, formulated as follows:
+  
+```math
+L_{total} = L_{dice} + L_{CE}
+```
+```math
+L_{dice} = -\frac{2}{|K|} \sum_{k \in K} \frac{\sum_{i \in I} u_i^k v_i^k}{\sum_{i \in I} u_i^k + \sum_{i \in I} v_i^k}
+```
+where $u$ is the softmax output of the network and $v$ is a one hot encoding of the ground truth segmentation map.
+
 - **Weight decay**: 3e-05
 - **Activation**: LeakyReLU
 - **Patch size**: 24 × 256 × 256
@@ -292,10 +294,13 @@ The metrics reported where calculated on a validation set on each one of the fiv
 We can see the global overview of the results on the validation set for all folds. We see a difference in performance between the PZ and TZ, since the latter is easier to segment than the former.
 
 The dice score formulation is as follows:
+
 $$\text{Dice} = \frac{2 \cdot |A \cap B|}{|A| + |B|}$$
+
 where $A$ is the predicted mask and $B$ is the ground truth mask.   
 
 IoU (Intersection over Union) is also reported, which is defined as:
+
 $$\text{IoU} = \frac{|A \cap B|}{|A \cup B|}$$
 
 True positive (TP), false positive (FP), and false negative (FN) counts are also provided for each fold, and
